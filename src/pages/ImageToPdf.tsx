@@ -155,9 +155,10 @@ export default function ImageToPdf() {
         )}
 
         {images.length > 0 && (
-          <Reorder.Group axis="y" values={images} onReorder={setImages} className="file-list">
-            <AnimatePresence>
-              {images.map((img, i) => (
+          <div className="file-scroll-container">
+            <Reorder.Group axis="y" values={images} onReorder={setImages} className="file-list">
+              <AnimatePresence>
+                {images.map((img, i) => (
                 <Reorder.Item key={img.path} value={img} className="file-item">
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
                     <img
@@ -200,9 +201,10 @@ export default function ImageToPdf() {
                     </div>
                   </div>
                 </Reorder.Item>
-              ))}
-            </AnimatePresence>
-          </Reorder.Group>
+                ))}
+              </AnimatePresence>
+            </Reorder.Group>
+          </div>
         )}
 
         <button

@@ -143,9 +143,10 @@ export default function MergePdf() {
         )}
 
         {pdfs.length > 0 && (
-          <Reorder.Group axis="y" values={pdfs} onReorder={setPdfs} className="file-list">
-            <AnimatePresence>
-              {pdfs.map((pdf, i) => (
+          <div className="file-scroll-container">
+            <Reorder.Group axis="y" values={pdfs} onReorder={setPdfs} className="file-list">
+              <AnimatePresence>
+                {pdfs.map((pdf, i) => (
                 <Reorder.Item key={pdf.path + pdf.name} value={pdf} className="file-item">
                   <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
                     <div style={{ width: "32px", height: "32px", background: "var(--bg-elevated)", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>
@@ -184,9 +185,10 @@ export default function MergePdf() {
                     </div>
                   </div>
                 </Reorder.Item>
-              ))}
-            </AnimatePresence>
-          </Reorder.Group>
+                ))}
+              </AnimatePresence>
+            </Reorder.Group>
+          </div>
         )}
 
         <button

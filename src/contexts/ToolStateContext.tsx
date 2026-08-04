@@ -22,10 +22,16 @@ interface ToolStateContextType {
   setMergePdfFiles: React.Dispatch<React.SetStateAction<PdfItem[]>>;
   
   // SplitPdf
-  splitPdfFile: PdfItem | null;
-  setSplitPdfFile: React.Dispatch<React.SetStateAction<PdfItem | null>>;
-  splitPdfPages: string;
-  setSplitPdfPages: React.Dispatch<React.SetStateAction<string>>;
+  splitPdfFilePath: string;
+  setSplitPdfFilePath: React.Dispatch<React.SetStateAction<string>>;
+  splitPdfFileName: string;
+  setSplitPdfFileName: React.Dispatch<React.SetStateAction<string>>;
+  splitPdfPageCount: number;
+  setSplitPdfPageCount: React.Dispatch<React.SetStateAction<number>>;
+  splitPdfThumbs: { num: number; dataUrl: string }[];
+  setSplitPdfThumbs: React.Dispatch<React.SetStateAction<{ num: number; dataUrl: string }[]>>;
+  splitPdfSelectedPages: number[];
+  setSplitPdfSelectedPages: React.Dispatch<React.SetStateAction<number[]>>;
   
   // PdfToDocx
   pdfToDocxFile: PdfItem | null;
@@ -42,8 +48,11 @@ export function ToolStateProvider({ children }: { children: ReactNode }) {
   const [imgToPdfImages, setImgToPdfImages] = useState<ImageItem[]>([]);
   const [mergePdfFiles, setMergePdfFiles] = useState<PdfItem[]>([]);
   
-  const [splitPdfFile, setSplitPdfFile] = useState<PdfItem | null>(null);
-  const [splitPdfPages, setSplitPdfPages] = useState("");
+  const [splitPdfFilePath, setSplitPdfFilePath] = useState("");
+  const [splitPdfFileName, setSplitPdfFileName] = useState("");
+  const [splitPdfPageCount, setSplitPdfPageCount] = useState(0);
+  const [splitPdfThumbs, setSplitPdfThumbs] = useState<{ num: number; dataUrl: string }[]>([]);
+  const [splitPdfSelectedPages, setSplitPdfSelectedPages] = useState<number[]>([]);
   
   const [pdfToDocxFile, setPdfToDocxFile] = useState<PdfItem | null>(null);
   
@@ -54,8 +63,11 @@ export function ToolStateProvider({ children }: { children: ReactNode }) {
       value={{
         imgToPdfImages, setImgToPdfImages,
         mergePdfFiles, setMergePdfFiles,
-        splitPdfFile, setSplitPdfFile,
-        splitPdfPages, setSplitPdfPages,
+        splitPdfFilePath, setSplitPdfFilePath,
+        splitPdfFileName, setSplitPdfFileName,
+        splitPdfPageCount, setSplitPdfPageCount,
+        splitPdfThumbs, setSplitPdfThumbs,
+        splitPdfSelectedPages, setSplitPdfSelectedPages,
         pdfToDocxFile, setPdfToDocxFile,
         viewerFilePath, setViewerFilePath,
       }}

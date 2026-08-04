@@ -136,13 +136,34 @@
 }
 
 /* File list for multiple files */
+.file-scroll-container {
+  max-height: 350px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-top: 12px;
+  padding-right: 6px;
+  border-radius: 4px;
+}
+
+.file-scroll-container::-webkit-scrollbar {
+  width: 8px;
+}
+.file-scroll-container::-webkit-scrollbar-track {
+  background: var(--bg-root);
+  border-radius: 4px;
+}
+.file-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+.file-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
 .file-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 12px;
-  max-height: 200px;
-  overflow-y: auto;
   text-align: left;
 }
 
