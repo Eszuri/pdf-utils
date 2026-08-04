@@ -94,8 +94,8 @@ export default function PdfToDocx() {
         </div>
       </div>
 
-      <div className="converter-card" style={{ position: "relative" }}>
-        {isHovering && !file && (
+      <div className="converter-card" style={{ position: "relative", pointerEvents: loading ? "none" : "auto", opacity: loading ? 0.7 : 1 }}>
+        {isHovering && !loading && !file && (
           <div style={{
             position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
             backgroundColor: "rgba(59, 130, 246, 0.9)", zIndex: 10,

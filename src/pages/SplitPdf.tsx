@@ -204,9 +204,9 @@ export default function SplitPdf() {
         </div>
       </div>
 
-      <div className="converter-card">
+      <div className="converter-card" style={{ pointerEvents: loading ? "none" : "auto", opacity: loading ? 0.7 : 1 }}>
         <div
-          className={`drop-zone ${filePath ? "has-file" : ""} ${isHovering ? "is-hovering" : ""}`}
+          className={`drop-zone ${filePath ? "has-file" : ""} ${isHovering && !loading ? "is-hovering" : ""}`}
           onClick={openFile}
           style={{ pointerEvents: thumbsLoading ? "none" : "auto", opacity: thumbsLoading ? 0.7 : 1 }}
         >
