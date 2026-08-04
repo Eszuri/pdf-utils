@@ -6,6 +6,7 @@ const tools = [
   { path: "/maker/image", icon: "🖼", title: "Image → PDF", desc: "Konversi gambar ke PDF", color: "#f43f5e" },
   { path: "/maker/merge", icon: "📑", title: "Merge PDF", desc: "Gabung beberapa PDF", color: "#6366f1" },
   { path: "/maker/split", icon: "✂", title: "Split PDF", desc: "Ekstrak halaman PDF", color: "#22c55e" },
+  { path: "/converter/pdf-to-word", icon: "📝", title: "PDF → Word", desc: "Konversi PDF ke Word (.docx)", color: "#3b82f6" },
   { path: "/viewer", icon: "🔍", title: "PDF Viewer", desc: "Lihat dan cari PDF", color: "#f59e0b" },
 ];
 

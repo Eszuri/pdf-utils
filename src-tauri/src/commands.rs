@@ -261,3 +261,49 @@ pub fn get_pdf_info(input_path: String) -> Result<serde_json::Value, String> {
 pub fn read_pdf_bytes(path: String) -> Result<Vec<u8>, String> {
     std::fs::read(&path).map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+pub fn write_file_bytes(output_path: String, bytes: Vec<u8>) -> Result<(), String> {
+    std::fs::write(&output_path, &bytes).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn pdf_to_docx(input_path: String, output_path: String) -> Result<(), String> {
+    // Use pdf2docx Python library for high-quality PDF to DOCX conversion
+    let python_paths = ["python", "python3", "py"];
+
+    let python = python_paths
+        .iter()
+        .find(|p| {
+            std::process::Command::new(p)
+                .arg("--version")
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(false)
+        })
+        .ok_or_else(|| "Python tidak ditemukan. Install Python terlebih dahulu.".to_string())?;
+
+    let script = format!(
+        "from pdf2docx import Converter; cv = Converter(r'{}'); cv.convert(r'{}'); cv.close()",
+        input_path.replace('\'', "\\'"),
+        output_path.replace('\'', "\\'")
+    );
+
+    let output = std::process::Command::new(python)
+        .arg("-c")
+        .arg(&script)
+        .output()
+        .map_err(|e| format!("Gagal menjalankan Python: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Konversi gagal: {}", stderr.trim()));
+    }
+
+    // Verify output file was created
+    if !std::path::Path::new(&output_path).exists() {
+        return Err("File docx hasil konversi tidak ditemukan.".to_string());
+    }
+
+    Ok(())
+}

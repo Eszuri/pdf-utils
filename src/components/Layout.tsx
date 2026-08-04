@@ -9,6 +9,7 @@ export default function Layout() {
     { to: "/maker/image", label: "Image → PDF", icon: "🖼" },
     { to: "/maker/merge", label: "Merge PDF", icon: "📑" },
     { to: "/maker/split", label: "Split PDF", icon: "✂" },
+    { to: "/converter/pdf-to-word", label: "PDF → Word", icon: "📝" },
     { to: "/viewer", label: "PDF Viewer", icon: "🔍" },
   ];
 
