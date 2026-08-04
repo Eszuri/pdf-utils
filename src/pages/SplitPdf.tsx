@@ -1,187 +1,96 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import * as pdfjsLib from "pdfjs-dist";
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
 import { useFileDrop } from "../hooks/useFileDrop";
-import "./MergeSplit.css";
+import { useSettings } from "../contexts/SettingsContext";
 import "../styles/Converter.css";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+interface PdfItem {
+  path: string;
+  name: string;
+  size: string;
+}
 
-interface PageThumb {
-  num: number;
-  dataUrl: string;
+function formatBytes(bytes: number) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 export default function SplitPdf() {
-  const [filePath, setFilePath] = useState("");
-  const [fileName, setFileName] = useState("");
-  const [pageCount, setPageCount] = useState(0);
-  const [pageThumbs, setPageThumbs] = useState<PageThumb[]>([]);
-  const [selectedPages, setSelectedPages] = useState<number[]>([]);
+  const [file, setFile] = useState<PdfItem | null>(null);
+  const [pages, setPages] = useState("");
   const [loading, setLoading] = useState(false);
-  const [thumbsLoading, setThumbsLoading] = useState(false);
-  const [previewFile, setPreviewFile] = useState<string | null>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const previewToken = useRef(0);
   const { showToast } = useToast();
+  const { t } = useSettings();
 
-  const handleFileDrop = useCallback((paths: string[]) => {
+  const handleFileDrop = useCallback(async (paths: string[]) => {
     if (paths.length > 0) {
-      loadPdf(paths[0]);
+      const p = paths[0];
+      const name = p.split("\\").pop() || p.split("/").pop() || p;
+      const data: number[] = await invoke("read_pdf_bytes", { path: p });
+      setFile({ path: p, name, size: formatBytes(data.length) });
     }
   }, []);
 
   const handleReject = useCallback(() => {
-    showToast("error", "Format file tidak didukung (harus PDF)");
-  }, [showToast]);
+    showToast("error", t("splitPdf.errFormat"));
+  }, [showToast, t]);
 
   const { isHovering } = useFileDrop(handleFileDrop, ["pdf"], handleReject);
 
-  async function openFile() {
-    const path = await open({
+  async function selectFile() {
+    const selected = await open({
+      multiple: false,
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
-    if (!path) return;
-    const p = Array.isArray(path) ? path[0] : path;
+    if (!selected) return;
     
-    const ext = p.split('.').pop()?.toLowerCase() || '';
+    const p = Array.isArray(selected) ? selected[0] : selected;
+    const ext = p.split('.').pop()?.toLowerCase();
+    
     if (ext !== "pdf") {
       handleReject();
       return;
     }
 
-    loadPdf(p);
-  }
-
-  async function loadPdf(p: string) {
-    setFilePath(p);
     const name = p.split("\\").pop() || p.split("/").pop() || p;
-    setFileName(name);
-    setPageThumbs([]);
-    setSelectedPages([]);
+    const data: number[] = await invoke("read_pdf_bytes", { path: p });
+    setFile({ path: p, name, size: formatBytes(data.length) });
+  }
 
-    try {
-      const info: any = await invoke("get_pdf_info", { inputPath: p });
-      setPageCount(info.page_count);
-    } catch (e) {
-      showToast("error", `Gagal membaca PDF: ${e}`);
+  async function handleSplit() {
+    if (!file) return;
+
+    // Remove empty spaces and validate basic characters (numbers, commas, hyphens)
+    const sanitizedPages = pages.replace(/\s+/g, "");
+    if (sanitizedPages && !/^[\d,\-]+$/.test(sanitizedPages)) {
+      showToast("error", "Format rentang halaman tidak valid. (Gunakan angka, koma, atau strip)");
       return;
     }
 
-    setThumbsLoading(true);
-    try {
-      const data: number[] = await invoke("read_pdf_bytes", { path: p });
-      const pdfData = new Uint8Array(data);
-      const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
-
-      const thumbs: PageThumb[] = [];
-      const offscreen = document.createElement("canvas");
-      const scale = 0.45;
-
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale });
-        offscreen.height = viewport.height;
-        offscreen.width = viewport.width;
-        await page.render({ canvas: offscreen, viewport }).promise;
-        thumbs.push({ num: i, dataUrl: offscreen.toDataURL("image/png") });
-      }
-      setPageThumbs(thumbs);
-    } catch (e) {
-      showToast("error", `Gagal render thumbnail: ${e}`);
-    }
-    setThumbsLoading(false);
-  }
-
-  function togglePage(page: number) {
-    setSelectedPages((prev) =>
-      prev.includes(page) ? prev.filter((p) => p !== page) : [...prev, page]
-    );
-  }
-
-  function selectAll() {
-    if (selectedPages.length === pageCount) {
-      setSelectedPages([]);
-    } else {
-      setSelectedPages(Array.from({ length: pageCount }, (_, i) => i + 1));
-    }
-  }
-
-  async function togglePreview(path: string) {
-    if (previewFile === path) {
-      closePreview();
-      return;
-    }
-
-    const token = ++previewToken.current;
-    setPreviewFile(path);
-
-    setTimeout(() => {
-      const container = previewRef.current;
-      if (container && token === previewToken.current) {
-        container.innerHTML = `<div class="pdf-loading" style="text-align: center; padding: 20px;"><span class="spinner-inline">⏳</span> Loading PDF...</div>`;
-      }
-    }, 0);
-
-    try {
-      const data: number[] = await invoke("read_pdf_bytes", { path });
-      if (token !== previewToken.current) return;
-
-      const pdfData = new Uint8Array(data);
-      const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
-      if (token !== previewToken.current) return;
-
-      const container = previewRef.current;
-      if (!container) return;
-      container.innerHTML = "";
-
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        if (token !== previewToken.current) return;
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 1.0 });
-        const canvas = document.createElement("canvas");
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        canvas.style.display = "block";
-        canvas.style.margin = "0 auto 12px";
-        canvas.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)";
-        canvas.style.borderRadius = "4px";
-        container.appendChild(canvas);
-        await page.render({ canvas, viewport }).promise;
-      }
-    } catch (e) {
-      if (token === previewToken.current) {
-        showToast("error", `Gagal menampilkan preview: ${e}`);
-        closePreview();
-      }
-    }
-  }
-
-  function closePreview() {
-    setPreviewFile(null);
-    if (previewRef.current) {
-      previewRef.current.innerHTML = "";
-    }
-  }
-
-  async function handleExtract() {
-    if (selectedPages.length === 0) return;
-    const path = await save({
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
-      defaultPath: "extracted.pdf",
+    // Default path suggests a generic zip name since splitting could result in multiple files
+    const savePath = await save({
+      filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+      defaultPath: "split-result.zip",
     });
-    if (!path) return;
+    
+    if (!savePath) return;
 
     setLoading(true);
     try {
-      await invoke("split_pdf", { inputPath: filePath, pages: selectedPages, outputPath: path });
-      showToast("success", `PDF berhasil diekstrak: ${path}`);
-    } catch (e) {
-      showToast("error", `Gagal mengekstrak PDF: ${e}`);
+      await invoke("split_pdf", { 
+        inputPath: file.path, 
+        pages: sanitizedPages,
+        outputPath: savePath
+      });
+      showToast("success", `Hasil split berhasil disimpan ke: ${savePath}`);
+    } catch (e: any) {
+      showToast("error", `Error: ${e}`);
     }
     setLoading(false);
   }
@@ -195,202 +104,109 @@ export default function SplitPdf() {
     >
       <div className="page-header">
         <div>
-          <h1>Split PDF</h1>
-          <p className="sub-title">Ekstrak halaman tertentu dari dokumen PDF</p>
+          <h1>{t("splitPdf.title")}</h1>
+          <p className="sub-title">{t("splitPdf.desc")}</p>
         </div>
       </div>
 
-      <div className="converter-card">
-        <div
-          className={`drop-zone ${filePath ? "has-file" : ""} ${isHovering ? "is-hovering" : ""}`}
-          onClick={openFile}
-          style={{ pointerEvents: thumbsLoading ? "none" : "auto", opacity: thumbsLoading ? 0.7 : 1 }}
-        >
-          {thumbsLoading ? (
-            <>
-              <div className="file-icon"><span className="spinner-inline">⏳</span></div>
-              <h3>Loading Thumbnails...</h3>
-              <p>Mohon tunggu sebentar</p>
-            </>
-          ) : filePath ? (
-            <>
-              <div className="file-icon">📄</div>
-              <h3 className="file-name">{fileName}</h3>
-              <p className="file-path">{filePath}</p>
-              <button className="btn-change">Ganti File</button>
-            </>
-          ) : (
-            <>
-              <div className="file-icon">📂</div>
-              <h3>Pilih atau Drop File PDF</h3>
-              <p>Klik atau seret dokumen PDF ke area ini</p>
-            </>
-          )}
-        </div>
+      <div className="converter-card" style={{ position: "relative" }}>
+        {isHovering && !file && (
+          <div style={{
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: "rgba(34, 197, 94, 0.9)", zIndex: 10,
+            display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
+            borderRadius: "var(--radius)", color: "white"
+          }}>
+            <div className="file-icon" style={{ fontSize: "48px", marginBottom: "16px" }}>✂️</div>
+            <h3 style={{ fontSize: "18px", fontWeight: "bold" }}>{t("splitPdf.dropText")}</h3>
+            <p>{t("splitPdf.dropSub")}</p>
+          </div>
+        )}
 
-        <AnimatePresence>
-          {filePath && (
+        <AnimatePresence mode="wait">
+          {!file ? (
+            <motion.div
+              key="dropzone"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+              className="drop-zone"
+              onClick={selectFile}
+              style={{ padding: "60px 20px", marginBottom: "0" }}
+            >
+              <div className="file-icon">✂️</div>
+              <h3>{t("splitPdf.dropText")}</h3>
+              <p>{t("splitPdf.dropSub")}</p>
+              <button className="btn-secondary" style={{ marginTop: "20px" }} onClick={(e) => { e.stopPropagation(); selectFile(); }}>
+                {t("splitPdf.btnSelect")}
+              </button>
+            </motion.div>
+          ) : (
             <motion.div
               key="file-info"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              style={{ overflow: "hidden" }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
             >
-              <div style={{ marginTop: 16 }}>
-                <p
-                  className={`file-info ${previewFile === filePath ? "previewing" : ""}`}
-                  onClick={() => togglePreview(filePath)}
-                  style={{ cursor: "pointer", color: "var(--accent)", fontSize: "13px" }}
-                >
-                  Lihat preview dokumen ({pageCount} halaman)
+              <div style={{ marginBottom: "24px" }}>
+                <h4 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{t("splitPdf.fileSelected")}</h4>
+                <div style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px", background: "var(--bg-elevated)", borderRadius: "var(--radius)", border: "1px solid var(--border-color)" }}>
+                  <div style={{ width: "40px", height: "40px", background: "var(--accent-soft)", color: "var(--accent)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>
+                    📄
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 500, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</div>
+                    <div style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "2px" }}>{file.size}</div>
+                  </div>
+                  <button className="btn-secondary" onClick={() => setFile(null)} disabled={loading} style={{ color: "var(--danger)", borderColor: "transparent", background: "rgba(244, 63, 94, 0.1)" }}>
+                    {t("splitPdf.btnRemove")}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "32px" }}>
+                <h4 style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{t("splitPdf.pageRange")}</h4>
+                <input
+                  type="text"
+                  placeholder="e.g. 1, 3, 5-10"
+                  value={pages}
+                  onChange={(e) => setPages(e.target.value)}
+                  disabled={loading}
+                  style={{
+                    width: "100%", padding: "14px 16px", borderRadius: "var(--radius)",
+                    background: "var(--bg-input)", border: "1px solid var(--border-color)",
+                    color: "var(--text-primary)", fontSize: "15px", outline: "none",
+                    transition: "border-color 0.2s"
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = "var(--accent)"}
+                  onBlur={(e) => e.target.style.borderColor = "var(--border-color)"}
+                />
+                <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "8px" }}>
+                  {t("splitPdf.pageRangeSub")}
                 </p>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
-        <AnimatePresence>
-          {pageCount > 0 && (
-            <motion.div
-              key="page-section"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: 0.25 }}
-            >
-              <label className="select-all" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, marginBottom: 12, cursor: "pointer", color: "var(--text-primary)" }}>
-                <input
-                  type="checkbox"
-                  checked={selectedPages.length === pageCount}
-                  onChange={selectAll}
-                  style={{ accentColor: "var(--accent)" }}
-                />
-                Select All Pages
-              </label>
-
-              <motion.div
-                className="page-grid page-thumb-grid"
-                initial="hidden"
-                animate="visible"
-                variants={{
-                  hidden: { opacity: 0 },
-                  visible: { opacity: 1, transition: { staggerChildren: 0.03 } },
-                }}
+              <button
+                className="btn-convert"
+                onClick={handleSplit}
+                disabled={loading}
+                style={{ width: "100%", padding: "16px", fontSize: "15px" }}
               >
-                {pageThumbs.length > 0 ? pageThumbs.map((thumb) => (
-                  <motion.div
-                    key={thumb.num}
-                    className={`page-thumb-card ${selectedPages.includes(thumb.num) ? "checked" : ""}`}
-                    variants={{
-                      hidden: { opacity: 0, scale: 0.9 },
-                      visible: { opacity: 1, scale: 1 },
-                    }}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => togglePage(thumb.num)}
-                  >
-                    <div className="page-thumb-img">
-                      <img src={thumb.dataUrl} alt={`Page ${thumb.num}`} />
-                    </div>
-                    <div className="page-thumb-label">
-                      <input
-                        type="checkbox"
-                        checked={selectedPages.includes(thumb.num)}
-                        onChange={() => togglePage(thumb.num)}
-                        style={{ accentColor: "var(--accent)" }}
-                      />
-                      <span>Page {thumb.num}</span>
-                    </div>
-                  </motion.div>
-                )) : (
-                  Array.from({ length: pageCount }, (_, i) => i + 1).map((p) => (
-                    <motion.label
-                      key={p}
-                      className={`page-check ${selectedPages.includes(p) ? "checked" : ""}`}
-                      variants={{
-                        hidden: { opacity: 0, scale: 0.9 },
-                        visible: { opacity: 1, scale: 1 },
-                      }}
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedPages.includes(p)}
-                        onChange={() => togglePage(p)}
-                        style={{ accentColor: "var(--accent)" }}
-                      />
-                      Page {p}
-                    </motion.label>
-                  ))
+                {loading ? (
+                  <>
+                    <span className="spinner-inline">⏳</span>
+                    {t("splitPdf.processing")}
+                  </>
+                ) : (
+                  t("splitPdf.btnExport")
                 )}
-              </motion.div>
+              </button>
             </motion.div>
           )}
         </AnimatePresence>
-
-        <button
-          className="btn-convert"
-          onClick={handleExtract}
-          disabled={loading || selectedPages.length === 0}
-          style={{ marginTop: 12 }}
-        >
-          {loading ? (
-            <>
-              <span className="spinner-inline">⏳</span>
-              Extracting...
-            </>
-          ) : (
-            `Extract ${selectedPages.length} Pages`
-          )}
-        </button>
       </div>
-
-      <AnimatePresence>
-        {previewFile && (
-          <motion.div
-            className="zoom-overlay"
-            onClick={closePreview}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: "rgba(0,0,0,0.6)", zIndex: 1000,
-              display: "flex", justifyContent: "center", alignItems: "center", padding: "40px"
-            }}
-          >
-            <motion.div
-              className="zoom-content"
-              onClick={(e) => e.stopPropagation()}
-              initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.85, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{
-                background: "var(--bg-surface)", padding: "20px", borderRadius: "12px",
-                width: "100%", maxWidth: "800px", maxHeight: "100%", display: "flex", flexDirection: "column"
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <h4 style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {previewFile.split("\\").pop() || previewFile.split("/").pop()}
-                </h4>
-                <button
-                  onClick={closePreview}
-                  style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer", color: "var(--text-primary)" }}
-                >
-                  ×
-                </button>
-              </div>
-              <div className="pdf-preview-scroll" ref={previewRef} style={{ overflowY: "auto", flex: 1, background: "#e5e7eb", borderRadius: "8px", padding: "20px" }}></div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }
-

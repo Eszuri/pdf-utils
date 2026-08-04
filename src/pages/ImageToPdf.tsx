@@ -1,9 +1,10 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, Reorder, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
 import { useFileDrop } from "../hooks/useFileDrop";
+import { useSettings } from "../contexts/SettingsContext";
 import "./ImageToPdf.css";
 import "../styles/Converter.css";
 
@@ -13,22 +14,12 @@ interface ImageItem {
   dataUrl: string;
 }
 
-function mimeFromExt(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase();
-  switch (ext) {
-    case "png": return "image/png";
-    case "jpg": case "jpeg": return "image/jpeg";
-    case "webp": return "image/webp";
-    case "bmp": return "image/bmp";
-    default: return "image/png";
-  }
-}
-
 export default function ImageToPdf() {
   const [images, setImages] = useState<ImageItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [zoomImg, setZoomImg] = useState<ImageItem | null>(null);
   const { showToast } = useToast();
+  const { t } = useSettings();
 
   const handleFileDrop = useCallback(async (paths: string[]) => {
     if (paths.length > 0) {
@@ -43,8 +34,8 @@ export default function ImageToPdf() {
   }, []);
 
   const handleReject = useCallback(() => {
-    showToast("error", "Format gambar tidak didukung (harus PNG, JPG, WEBP, atau BMP)");
-  }, [showToast]);
+    showToast("error", t("imgToPdf.errFormat"));
+  }, [showToast, t]);
 
   const { isHovering } = useFileDrop(handleFileDrop, ["png", "jpg", "jpeg", "webp", "bmp"], handleReject);
 
@@ -84,32 +75,41 @@ export default function ImageToPdf() {
   }
 
   function removeImage(index: number) {
-    const removed = images[index];
-    URL.revokeObjectURL(removed.dataUrl);
-    setImages((prev) => prev.filter((_, i) => i !== index));
+    setImages((prev) => {
+      const newImages = [...prev];
+      URL.revokeObjectURL(newImages[index].dataUrl);
+      newImages.splice(index, 1);
+      return newImages;
+    });
   }
 
-  function moveImage(from: number, to: number) {
-    if (to < 0 || to >= images.length) return;
-    const copy = [...images];
-    const [item] = copy.splice(from, 1);
-    copy.splice(to, 0, item);
-    setImages(copy);
+  function mimeFromExt(name: string) {
+    const ext = name.split(".").pop()?.toLowerCase();
+    switch (ext) {
+      case "png": return "image/png";
+      case "jpg":
+      case "jpeg": return "image/jpeg";
+      case "webp": return "image/webp";
+      case "bmp": return "image/bmp";
+      default: return "application/octet-stream";
+    }
   }
 
   async function handleExport() {
     if (images.length === 0) return;
-    const path = await save({
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    const savePath = await save({
+      filters: [{ name: "PDF Document", extensions: ["pdf"] }],
       defaultPath: "images.pdf",
     });
-    if (!path) return;
+    if (!savePath) return;
+
     setLoading(true);
     try {
-      await invoke("images_to_pdf", { imagePaths: images.map((i) => i.path), outputPath: path });
-      showToast("success", `PDF berhasil dibuat: ${path}`);
-    } catch (e) {
-      showToast("error", `Gagal membuat PDF: ${e}`);
+      const paths = images.map((img) => img.path);
+      await invoke("images_to_pdf", { imagePaths: paths, outputPath: savePath });
+      showToast("success", `PDF berhasil disimpan ke: ${savePath}`);
+    } catch (e: any) {
+      showToast("error", `Error: ${e}`);
     }
     setLoading(false);
   }
@@ -123,103 +123,105 @@ export default function ImageToPdf() {
     >
       <div className="page-header">
         <div>
-          <h1>Image → PDF</h1>
-          <p className="sub-title">Konversi kumpulan gambar menjadi dokumen PDF</p>
+          <h1>{t("imgToPdf.title")}</h1>
+          <p className="sub-title">{t("imgToPdf.desc")}</p>
         </div>
       </div>
 
-      <div className="converter-card">
-        <div
-          className={`drop-zone ${images.length > 0 ? "has-file" : ""} ${isHovering ? "is-hovering" : ""}`}
-          onClick={addImages}
-        >
+      <div className="converter-card" style={{ position: "relative" }}>
+        {isHovering && (
+          <div style={{
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: "rgba(59, 130, 246, 0.9)", zIndex: 10,
+            display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
+            borderRadius: "var(--radius)", color: "white"
+          }}>
+            <div className="file-icon" style={{ fontSize: "48px", marginBottom: "16px" }}>📸</div>
+            <h3 style={{ fontSize: "18px", fontWeight: "bold" }}>{t("imgToPdf.dropText")}</h3>
+            <p>{t("imgToPdf.dropSub")}</p>
+          </div>
+        )}
+
+        <div className="drop-zone" onClick={addImages} style={{ margin: "0 0 20px 0" }}>
           <div className="file-icon">🖼️</div>
-          <h3>Pilih atau Drop Gambar</h3>
-          <p>Klik atau seret gambar ke area ini (PNG, JPG, WEBP, BMP)</p>
+          <h3>{t("imgToPdf.dropText")}</h3>
+          <p>{t("imgToPdf.dropSub")}</p>
         </div>
 
-        <AnimatePresence mode="popLayout">
-          {images.length > 0 && (
-            <motion.div
-              key="image-section"
-              className="image-section"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25 }}
-              style={{ overflow: "hidden", marginTop: "12px" }}
-            >
-              <motion.div className="image-list" layout>
-                <AnimatePresence mode="popLayout">
-                  {images.map((img, i) => (
-                    <motion.div
-                      key={img.path + img.name}
-                      className="image-item"
-                      layout
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                      transition={{ duration: 0.2 }}
-                      style={{
-                        background: "var(--bg-surface)",
-                        border: "1px solid var(--border-color)",
-                        padding: "8px 12px",
-                        borderRadius: "8px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        marginBottom: "8px"
-                      }}
-                    >
-                      <motion.img
-                        className="image-thumb"
-                        src={img.dataUrl}
-                        alt={img.name}
-                        onClick={() => setZoomImg(img)}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        style={{ width: "40px", height: "40px", objectFit: "cover", borderRadius: "4px", cursor: "pointer" }}
-                      />
+        {images.length > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              {images.length} File terpilih
+            </span>
+            <button className="btn-secondary" onClick={() => setImages([])} disabled={loading} style={{ color: "var(--danger)", borderColor: "transparent", background: "rgba(244, 63, 94, 0.1)", padding: "6px 12px", fontSize: "12px" }}>
+              🗑 {t("imgToPdf.btnClear")}
+            </button>
+          </div>
+        )}
+
+        {images.length > 0 && (
+          <Reorder.Group axis="y" values={images} onReorder={setImages} className="file-list">
+            <AnimatePresence>
+              {images.map((img, i) => (
+                <Reorder.Item key={img.path} value={img} className="file-item">
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+                    <img
+                      src={img.dataUrl}
+                      className="image-thumb"
+                      onClick={() => setZoomImg(img)}
+                      alt={img.name}
+                    />
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
                       <span className="image-name" style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: "13px" }}>
                         {img.name}
                       </span>
-                      <div className="image-actions" style={{ display: "flex", gap: "4px" }}>
-                        <button
-                          onClick={() => moveImage(i, i - 1)}
-                          disabled={i === 0}
-                          style={{ border: "none", background: "none", cursor: i === 0 ? "not-allowed" : "pointer", opacity: i === 0 ? 0.3 : 1, color: "var(--text-primary)" }}
-                        >↑</button>
-                        <button
-                          onClick={() => moveImage(i, i + 1)}
-                          disabled={i === images.length - 1}
-                          style={{ border: "none", background: "none", cursor: i === images.length - 1 ? "not-allowed" : "pointer", opacity: i === images.length - 1 ? 0.3 : 1, color: "var(--text-primary)" }}
-                        >↓</button>
-                        <button
-                          className="btn-remove"
-                          onClick={() => removeImage(i)}
-                          style={{ marginLeft: "8px" }}
-                        >×</button>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                    </div>
+                    <div className="image-actions">
+                      <button
+                        onClick={() => {
+                          const arr = [...images];
+                          [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+                          setImages(arr);
+                        }}
+                        disabled={i === 0 || loading}
+                        style={{ border: "none", background: "none", cursor: i === 0 ? "not-allowed" : "pointer", opacity: i === 0 ? 0.3 : 1, color: "var(--text-primary)" }}
+                      >
+                        ▲
+                      </button>
+                      <button
+                        onClick={() => {
+                          const arr = [...images];
+                          [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+                          setImages(arr);
+                        }}
+                        disabled={i === images.length - 1 || loading}
+                        style={{ border: "none", background: "none", cursor: i === images.length - 1 ? "not-allowed" : "pointer", opacity: i === images.length - 1 ? 0.3 : 1, color: "var(--text-primary)" }}
+                      >
+                        ▼
+                      </button>
+                      <button className="btn-remove" onClick={() => removeImage(i)} disabled={loading} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                        ✖
+                      </button>
+                    </div>
+                  </div>
+                </Reorder.Item>
+              ))}
+            </AnimatePresence>
+          </Reorder.Group>
+        )}
 
         <button
           className="btn-convert"
           onClick={handleExport}
-          disabled={loading || images.length === 0}
+          disabled={images.length === 0 || loading}
         >
           {loading ? (
             <>
               <span className="spinner-inline">⏳</span>
-              Memproses...
+              {t("imgToPdf.processing")}
             </>
           ) : (
-            "Export to PDF"
+            t("imgToPdf.btnExport")
           )}
         </button>
       </div>
@@ -228,16 +230,10 @@ export default function ImageToPdf() {
         {zoomImg && (
           <motion.div
             className="zoom-overlay"
-            onClick={() => setZoomImg(null)}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: "rgba(0,0,0,0.8)", zIndex: 1000,
-              display: "flex", justifyContent: "center", alignItems: "center", padding: "40px"
-            }}
+            onClick={() => setZoomImg(null)}
           >
             <motion.div
               className="zoom-content"

@@ -1,134 +1,105 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import * as pdfjsLib from "pdfjs-dist";
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, Reorder, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
 import { useFileDrop } from "../hooks/useFileDrop";
+import { useSettings } from "../contexts/SettingsContext";
 import "../styles/Converter.css";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+interface PdfItem {
+  path: string;
+  name: string;
+  size: string;
+}
+
+function formatBytes(bytes: number) {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+}
 
 export default function MergePdf() {
-  const [files, setFiles] = useState<string[]>([]);
+  const [pdfs, setPdfs] = useState<PdfItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [previewFile, setPreviewFile] = useState<string | null>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const previewToken = useRef(0);
   const { showToast } = useToast();
+  const { t } = useSettings();
 
-  const handleFileDrop = useCallback((paths: string[]) => {
+  const handleFileDrop = useCallback(async (paths: string[]) => {
     if (paths.length > 0) {
-      setFiles((prev) => [...prev, ...paths]);
+      const newItems = await Promise.all(
+        paths.map(async (p) => {
+          const name = p.split("\\").pop() || p.split("/").pop() || p;
+          const data: number[] = await invoke("read_pdf_bytes", { path: p });
+          return { path: p, name, size: formatBytes(data.length) };
+        })
+      );
+      setPdfs((prev) => [...prev, ...newItems]);
     }
   }, []);
 
   const handleReject = useCallback(() => {
-    showToast("error", "Format file tidak didukung (harus PDF)");
-  }, [showToast]);
+    showToast("error", t("mergePdf.errFormat"));
+  }, [showToast, t]);
 
   const { isHovering } = useFileDrop(handleFileDrop, ["pdf"], handleReject);
 
-  async function addFiles() {
-    const selected = await open({
+  async function addPdfs() {
+    const files = await open({
       multiple: true,
       filters: [{ name: "PDF", extensions: ["pdf"] }],
     });
-    if (!selected) return;
-    const paths = Array.isArray(selected) ? selected : [selected];
-    
+    if (!files) return;
+
+    const paths = Array.isArray(files) ? files : [files];
+    const allowed = ["pdf"];
     const validPaths = paths.filter(p => {
       const ext = p.split('.').pop()?.toLowerCase() || '';
-      return ext === "pdf";
+      return allowed.includes(ext);
     });
 
     if (validPaths.length !== paths.length) {
       handleReject();
     }
     
-    if (validPaths.length > 0) {
-      setFiles((prev) => [...prev, ...validPaths]);
-    }
+    if (validPaths.length === 0) return;
+
+    const newItems = await Promise.all(
+      validPaths.map(async (p) => {
+        const name = p.split("\\").pop() || p.split("/").pop() || p;
+        const data: number[] = await invoke("read_pdf_bytes", { path: p });
+        return { path: p, name, size: formatBytes(data.length) };
+      })
+    );
+    setPdfs((prev) => [...prev, ...newItems]);
   }
 
-  function removeFile(index: number) {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+  function removePdf(index: number) {
+    setPdfs((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleMerge() {
-    if (files.length < 2) return;
-    const path = await save({
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    if (pdfs.length < 2) {
+      showToast("error", "Minimal 2 file PDF untuk digabung.");
+      return;
+    }
+    const savePath = await save({
+      filters: [{ name: "PDF Document", extensions: ["pdf"] }],
       defaultPath: "merged.pdf",
     });
-    if (!path) return;
+    if (!savePath) return;
 
     setLoading(true);
     try {
-      await invoke("merge_pdfs", { inputPaths: files, outputPath: path });
-      showToast("success", `PDF berhasil digabung: ${path}`);
-    } catch (e) {
-      showToast("error", `Gagal menggabung PDF: ${e}`);
+      const paths = pdfs.map((p) => p.path);
+      await invoke("merge_pdfs", { pdfPaths: paths, outputPath: savePath });
+      showToast("success", `PDF berhasil digabung ke: ${savePath}`);
+    } catch (e: any) {
+      showToast("error", `Error: ${e}`);
     }
     setLoading(false);
-  }
-
-  async function togglePreview(path: string) {
-    if (previewFile === path) {
-      closePreview();
-      return;
-    }
-
-    const token = ++previewToken.current;
-    setPreviewFile(path);
-    
-    setTimeout(() => {
-      const container = previewRef.current;
-      if (container && token === previewToken.current) {
-        container.innerHTML = `<div class="pdf-loading" style="text-align: center; padding: 20px;"><span class="spinner-inline">⏳</span> Loading PDF...</div>`;
-      }
-    }, 0);
-
-    try {
-      const data: number[] = await invoke("read_pdf_bytes", { path });
-      if (token !== previewToken.current) return;
-
-      const pdfData = new Uint8Array(data);
-      const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
-      if (token !== previewToken.current) return;
-
-      const container = previewRef.current;
-      if (!container) return;
-      container.innerHTML = "";
-
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        if (token !== previewToken.current) return;
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 1.0 });
-        const canvas = document.createElement("canvas");
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        canvas.style.display = "block";
-        canvas.style.margin = "0 auto 12px";
-        canvas.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)";
-        canvas.style.borderRadius = "4px";
-        container.appendChild(canvas);
-        await page.render({ canvas, viewport }).promise;
-      }
-    } catch (e) {
-      if (token === previewToken.current) {
-        showToast("error", `Gagal menampilkan preview: ${e}`);
-        closePreview();
-      }
-    }
-  }
-
-  function closePreview() {
-    setPreviewFile(null);
-    if (previewRef.current) {
-      previewRef.current.innerHTML = "";
-    }
   }
 
   return (
@@ -140,117 +111,104 @@ export default function MergePdf() {
     >
       <div className="page-header">
         <div>
-          <h1>Merge PDF</h1>
-          <p className="sub-title">Gabung beberapa file PDF menjadi satu</p>
+          <h1>{t("mergePdf.title")}</h1>
+          <p className="sub-title">{t("mergePdf.desc")}</p>
         </div>
       </div>
 
-      <div className="converter-card">
-        <div
-          className={`drop-zone ${files.length > 0 ? "has-file" : ""} ${isHovering ? "is-hovering" : ""}`}
-          onClick={addFiles}
-        >
-          <div className="file-icon">📂</div>
-          <h3>Pilih atau Drop File PDF</h3>
-          <p>Klik atau seret dokumen PDF ke area ini</p>
+      <div className="converter-card" style={{ position: "relative" }}>
+        {isHovering && (
+          <div style={{
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: "rgba(99, 102, 241, 0.9)", zIndex: 10,
+            display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center",
+            borderRadius: "var(--radius)", color: "white"
+          }}>
+            <div className="file-icon" style={{ fontSize: "48px", marginBottom: "16px" }}>📑</div>
+            <h3 style={{ fontSize: "18px", fontWeight: "bold" }}>{t("mergePdf.dropText")}</h3>
+            <p>{t("mergePdf.dropSub")}</p>
+          </div>
+        )}
+
+        <div className="drop-zone" onClick={addPdfs} style={{ margin: "0 0 20px 0" }}>
+          <div className="file-icon">📑</div>
+          <h3>{t("mergePdf.dropText")}</h3>
+          <p>{t("mergePdf.dropSub")}</p>
         </div>
 
-        <AnimatePresence>
-          {files.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              style={{ overflow: "hidden" }}
-            >
-              <div className="file-list">
-                <AnimatePresence mode="popLayout">
-                  {files.map((f, i) => (
-                    <motion.div
-                      key={`${f}-${i}`}
-                      className="file-item"
-                      layout
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                      onClick={() => togglePreview(f)}
-                    >
-                      <span title={f}>{f.split("\\").pop() || f.split("/").pop()}</span>
+        {pdfs.length > 0 && (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <span style={{ fontSize: "13px", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              {pdfs.length} File terpilih
+            </span>
+            <button className="btn-secondary" onClick={() => setPdfs([])} disabled={loading} style={{ color: "var(--danger)", borderColor: "transparent", background: "rgba(244, 63, 94, 0.1)", padding: "6px 12px", fontSize: "12px" }}>
+              🗑 {t("mergePdf.btnClear")}
+            </button>
+          </div>
+        )}
+
+        {pdfs.length > 0 && (
+          <Reorder.Group axis="y" values={pdfs} onReorder={setPdfs} className="file-list">
+            <AnimatePresence>
+              {pdfs.map((pdf, i) => (
+                <Reorder.Item key={pdf.path + pdf.name} value={pdf} className="file-item">
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+                    <div style={{ width: "32px", height: "32px", background: "var(--bg-elevated)", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>
+                      📄
+                    </div>
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
+                      <span className="file-name" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pdf.name}</span>
+                      <span className="file-size" style={{ fontSize: "12px", color: "var(--text-muted)" }}>{pdf.size}</span>
+                    </div>
+                    <div className="file-actions" style={{ display: "flex", gap: "4px" }}>
                       <button
-                        className="btn-remove"
-                        onClick={(e) => { e.stopPropagation(); removeFile(i); }}
-                        title="Hapus file"
+                        onClick={() => {
+                          const arr = [...pdfs];
+                          [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+                          setPdfs(arr);
+                        }}
+                        disabled={i === 0 || loading}
+                        style={{ border: "none", background: "none", cursor: i === 0 ? "not-allowed" : "pointer", opacity: i === 0 ? 0.3 : 1, color: "var(--text-primary)" }}
                       >
-                        ×
+                        ▲
                       </button>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+                      <button
+                        onClick={() => {
+                          const arr = [...pdfs];
+                          [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+                          setPdfs(arr);
+                        }}
+                        disabled={i === pdfs.length - 1 || loading}
+                        style={{ border: "none", background: "none", cursor: i === pdfs.length - 1 ? "not-allowed" : "pointer", opacity: i === pdfs.length - 1 ? 0.3 : 1, color: "var(--text-primary)" }}
+                      >
+                        ▼
+                      </button>
+                      <button className="btn-remove" onClick={() => removePdf(i)} disabled={loading} style={{ background: "none", border: "none", cursor: "pointer", marginLeft: "8px" }}>
+                        ✖
+                      </button>
+                    </div>
+                  </div>
+                </Reorder.Item>
+              ))}
+            </AnimatePresence>
+          </Reorder.Group>
+        )}
 
         <button
           className="btn-convert"
           onClick={handleMerge}
-          disabled={loading || files.length < 2}
+          disabled={pdfs.length < 2 || loading}
         >
           {loading ? (
             <>
               <span className="spinner-inline">⏳</span>
-              Merging...
+              {t("mergePdf.processing")}
             </>
           ) : (
-            `Merge ${files.length} Files`
+            t("mergePdf.btnExport")
           )}
         </button>
       </div>
-
-      <AnimatePresence>
-        {previewFile && (
-          <motion.div
-            className="zoom-overlay"
-            onClick={closePreview}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: "rgba(0,0,0,0.6)", zIndex: 1000,
-              display: "flex", justifyContent: "center", alignItems: "center", padding: "40px"
-            }}
-          >
-            <motion.div
-              className="zoom-content"
-              onClick={(e) => e.stopPropagation()}
-              initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.85, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{
-                background: "var(--bg-surface)", padding: "20px", borderRadius: "12px",
-                width: "100%", maxWidth: "800px", maxHeight: "100%", display: "flex", flexDirection: "column"
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                <h4 style={{ margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {previewFile.split("\\").pop() || previewFile.split("/").pop()}
-                </h4>
-                <button
-                  onClick={closePreview}
-                  style={{ background: "none", border: "none", fontSize: "24px", cursor: "pointer", color: "var(--text-primary)" }}
-                >
-                  ×
-                </button>
-              </div>
-              <div className="pdf-preview-scroll" ref={previewRef} style={{ overflowY: "auto", flex: 1, background: "#e5e7eb", borderRadius: "8px", padding: "20px" }}></div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }
-

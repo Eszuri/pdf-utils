@@ -1,14 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useSettings } from "../contexts/SettingsContext";
 import "./Home.css";
-
-const tools = [
-  { path: "/maker/image", icon: "🖼", title: "Image → PDF", desc: "Konversi gambar ke PDF", color: "#f43f5e" },
-  { path: "/maker/merge", icon: "📑", title: "Merge PDF", desc: "Gabung beberapa PDF", color: "#6366f1" },
-  { path: "/maker/split", icon: "✂", title: "Split PDF", desc: "Ekstrak halaman PDF", color: "#22c55e" },
-  { path: "/converter/pdf-to-word", icon: "📝", title: "PDF → Word", desc: "Konversi PDF ke Word (.docx)", color: "#3b82f6" },
-  { path: "/viewer", icon: "🔍", title: "PDF Viewer", desc: "Lihat dan cari PDF", color: "#f59e0b" },
-];
 
 const container = {
   hidden: {},
@@ -22,6 +15,15 @@ const card = {
 
 export default function Home() {
   const navigate = useNavigate();
+  const { t } = useSettings();
+
+  const tools = [
+    { path: "/maker/image", icon: "🖼", title: t("nav.imageToPdf"), desc: t("home.desc.image"), color: "#f43f5e" },
+    { path: "/maker/merge", icon: "📑", title: t("nav.mergePdf"), desc: t("home.desc.merge"), color: "#6366f1" },
+    { path: "/maker/split", icon: "✂", title: t("nav.splitPdf"), desc: t("home.desc.split"), color: "#22c55e" },
+    { path: "/converter/pdf-to-word", icon: "📝", title: t("nav.pdfToWord"), desc: t("home.desc.word"), color: "#3b82f6" },
+    { path: "/viewer", icon: "🔍", title: t("nav.viewer"), desc: t("home.desc.viewer"), color: "#f59e0b" },
+  ];
 
   return (
     <motion.div
@@ -32,10 +34,10 @@ export default function Home() {
     >
       <div className="home-header">
         <motion.h1 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.02 }}>
-          PDF Utils
+          {t("app.title")}
         </motion.h1>
         <motion.p className="home-sub" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.06 }}>
-          Alat PDF sederhana untuk kebutuhan sehari-hari
+          {t("app.desc")}
         </motion.p>
       </div>
 

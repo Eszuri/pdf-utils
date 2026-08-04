@@ -5,6 +5,8 @@ import * as pdfjsLib from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
+import { useSettings } from "../contexts/SettingsContext";
+import "../styles/Converter.css";
 import "./Viewer.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
@@ -42,6 +44,7 @@ export default function Viewer() {
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0, px: 0, py: 0 });
   const { showToast } = useToast();
+  const { t } = useSettings();
 
   const renderPage = useCallback(async (pdfDoc: pdfjsLib.PDFDocumentProxy, pageNum: number) => {
     const taskId = ++renderTaskId.current;
@@ -240,8 +243,8 @@ export default function Viewer() {
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.25, delay: 0.05 }}
       >
-        <h3>PDF Viewer</h3>
-        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, marginTop: -8 }}>Buka dan jelajahi isi PDF</p>
+        <h3>{t("viewer.title")}</h3>
+        <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, marginTop: -8 }}>{t("viewer.desc")}</p>
         <motion.button
           className="btn-primary"
           onClick={openPdf}
@@ -249,7 +252,7 @@ export default function Viewer() {
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.97 }}
         >
-          {filePath ? "Open Another PDF" : "Open PDF"}
+          {t("viewer.btnSelect")}
         </motion.button>
 
         <div className="search-section">
@@ -393,7 +396,7 @@ export default function Viewer() {
             >
               <div style={{ textAlign: "center" }}>
                 <div style={{ fontSize: 40, marginBottom: 12 }}>📄</div>
-                <div style={{ color: "var(--text-muted)", fontSize: 15 }}>Belum ada PDF dibuka</div>
+                <div style={{ color: "var(--text-muted)", fontSize: 15 }}>{t("viewer.desc")}</div>
                 <div style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 4, opacity: 0.6 }}>Klik "Open PDF" untuk memulai</div>
               </div>
             </motion.div>

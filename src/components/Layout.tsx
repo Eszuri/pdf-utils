@@ -1,16 +1,18 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useSettings } from "../contexts/SettingsContext";
 import "./Layout.css";
 
 export default function Layout() {
   const navigate = useNavigate();
+  const { t } = useSettings();
 
   const navItems = [
-    { to: "/maker/image", label: "Image → PDF", icon: "🖼" },
-    { to: "/maker/merge", label: "Merge PDF", icon: "📑" },
-    { to: "/maker/split", label: "Split PDF", icon: "✂" },
-    { to: "/converter/pdf-to-word", label: "PDF → Word", icon: "📝" },
-    { to: "/viewer", label: "PDF Viewer", icon: "🔍" },
+    { to: "/maker/image", label: t("nav.imageToPdf"), icon: "🖼" },
+    { to: "/maker/merge", label: t("nav.mergePdf"), icon: "📑" },
+    { to: "/maker/split", label: t("nav.splitPdf"), icon: "✂" },
+    { to: "/converter/pdf-to-word", label: t("nav.pdfToWord"), icon: "📝" },
+    { to: "/viewer", label: t("nav.viewer"), icon: "🔍" },
   ];
 
   return (
@@ -23,11 +25,11 @@ export default function Layout() {
           whileTap={{ scale: 0.98 }}
         >
           <span className="brand-icon">📄</span>
-          <span className="brand-text">PDF Utils</span>
+          <span className="brand-text">{t("app.title")}</span>
         </motion.div>
 
         <nav className="sidebar-nav">
-          <div className="nav-label">Tools</div>
+          <div className="nav-label">{t("nav.tools")}</div>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -35,7 +37,7 @@ export default function Layout() {
               className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
             >
               <span className="nav-icon">{item.icon}</span>
-              <span className="nav-text">{item.label}</span>
+              <span className="nav-text">{item.label as string}</span>
             </NavLink>
           ))}
           
@@ -45,7 +47,7 @@ export default function Layout() {
               className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
             >
               <span className="nav-icon">⚙️</span>
-              <span className="nav-text">Pengaturan</span>
+              <span className="nav-text">{t("nav.settings")}</span>
             </NavLink>
           </div>
         </nav>
