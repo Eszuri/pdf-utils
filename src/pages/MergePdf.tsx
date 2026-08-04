@@ -24,7 +24,11 @@ export default function MergePdf() {
     }
   }, []);
 
-  const { isHovering } = useFileDrop(handleFileDrop, ["pdf"]);
+  const handleReject = useCallback(() => {
+    showToast("error", "Format file tidak didukung (harus PDF)");
+  }, [showToast]);
+
+  const { isHovering } = useFileDrop(handleFileDrop, ["pdf"], handleReject);
 
   async function addFiles() {
     const selected = await open({
@@ -33,7 +37,19 @@ export default function MergePdf() {
     });
     if (!selected) return;
     const paths = Array.isArray(selected) ? selected : [selected];
-    setFiles((prev) => [...prev, ...paths]);
+    
+    const validPaths = paths.filter(p => {
+      const ext = p.split('.').pop()?.toLowerCase() || '';
+      return ext === "pdf";
+    });
+
+    if (validPaths.length !== paths.length) {
+      handleReject();
+    }
+    
+    if (validPaths.length > 0) {
+      setFiles((prev) => [...prev, ...validPaths]);
+    }
   }
 
   function removeFile(index: number) {

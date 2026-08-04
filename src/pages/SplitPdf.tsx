@@ -35,7 +35,11 @@ export default function SplitPdf() {
     }
   }, []);
 
-  const { isHovering } = useFileDrop(handleFileDrop, ["pdf"]);
+  const handleReject = useCallback(() => {
+    showToast("error", "Format file tidak didukung (harus PDF)");
+  }, [showToast]);
+
+  const { isHovering } = useFileDrop(handleFileDrop, ["pdf"], handleReject);
 
   async function openFile() {
     const path = await open({
@@ -43,6 +47,13 @@ export default function SplitPdf() {
     });
     if (!path) return;
     const p = Array.isArray(path) ? path[0] : path;
+    
+    const ext = p.split('.').pop()?.toLowerCase() || '';
+    if (ext !== "pdf") {
+      handleReject();
+      return;
+    }
+
     loadPdf(p);
   }
 

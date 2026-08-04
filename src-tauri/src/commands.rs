@@ -37,45 +37,6 @@ fn remap_references(obj: &Object, id_map: &HashMap<(u32, u16), (u32, u16)>) -> O
     }
 }
 
-#[tauri::command]
-pub fn text_to_pdf(text: String, output_path: String) -> Result<(), String> {
-    let mut doc = PdfDocument::new("Document");
-
-    let mut ops = Vec::new();
-    ops.push(Op::SaveGraphicsState);
-    ops.push(Op::StartTextSection);
-    ops.push(Op::SetFontSizeBuiltinFont {
-        size: Pt(11.0),
-        font: BuiltinFont::Helvetica,
-    });
-    ops.push(Op::SetLineHeight { lh: Pt(5.0) });
-
-    let mut y_pos = 280.0;
-    for line in text.lines() {
-        ops.push(Op::SetTextCursor {
-            pos: Point::new(Mm(20.0), Mm(y_pos)),
-        });
-        ops.push(Op::WriteTextBuiltinFont {
-            items: vec![TextItem::Text(line.to_string())],
-            font: BuiltinFont::Helvetica,
-        });
-        y_pos -= 5.0;
-        if y_pos < 20.0 {
-            break;
-        }
-    }
-
-    ops.push(Op::EndTextSection);
-    ops.push(Op::RestoreGraphicsState);
-
-    let page = PdfPage::new(Mm(210.0), Mm(297.0), ops);
-    let bytes = doc
-        .with_pages(vec![page])
-        .save(&PdfSaveOptions::default(), &mut Vec::new());
-
-    std::fs::write(&output_path, &bytes).map_err(|e| e.to_string())?;
-    Ok(())
-}
 
 #[tauri::command]
 pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> Result<(), String> {

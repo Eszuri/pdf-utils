@@ -21,7 +21,11 @@ export default function PdfToDocx() {
     }
   }, []);
 
-  const { isHovering } = useFileDrop(handleFileDrop, ["pdf"]);
+  const handleReject = useCallback(() => {
+    showToast("error", "Format file tidak didukung (harus PDF)");
+  }, [showToast]);
+
+  const { isHovering } = useFileDrop(handleFileDrop, ["pdf"], handleReject);
 
   async function handleSelectPdf() {
     try {
@@ -30,6 +34,13 @@ export default function PdfToDocx() {
       });
       if (!selected) return;
       const p = Array.isArray(selected) ? selected[0] : selected;
+      
+      const ext = p.split('.').pop()?.toLowerCase() || '';
+      if (ext !== "pdf") {
+        handleReject();
+        return;
+      }
+
       const name = p.split("\\").pop() || p.split("/").pop() || p;
       setFilePath(p);
       setFileName(name);

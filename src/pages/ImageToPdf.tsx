@@ -42,7 +42,11 @@ export default function ImageToPdf() {
     }
   }, []);
 
-  const { isHovering } = useFileDrop(handleFileDrop, ["png", "jpg", "jpeg", "webp", "bmp"]);
+  const handleReject = useCallback(() => {
+    showToast("error", "Format gambar tidak didukung (harus PNG, JPG, WEBP, atau BMP)");
+  }, [showToast]);
+
+  const { isHovering } = useFileDrop(handleFileDrop, ["png", "jpg", "jpeg", "webp", "bmp"], handleReject);
 
   async function loadImageData(path: string, name: string): Promise<ImageItem> {
     const data: number[] = await invoke("read_pdf_bytes", { path });
@@ -56,9 +60,22 @@ export default function ImageToPdf() {
       filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "bmp"] }],
     });
     if (!files) return;
+    
     const paths = Array.isArray(files) ? files : [files];
+    const allowed = ["png", "jpg", "jpeg", "webp", "bmp"];
+    const validPaths = paths.filter(p => {
+      const ext = p.split('.').pop()?.toLowerCase() || '';
+      return allowed.includes(ext);
+    });
+
+    if (validPaths.length !== paths.length) {
+      handleReject();
+    }
+    
+    if (validPaths.length === 0) return;
+
     const items = await Promise.all(
-      paths.map((p) => {
+      validPaths.map((p) => {
         const name = p.split("\\").pop() || p.split("/").pop() || p;
         return loadImageData(p, name);
       })

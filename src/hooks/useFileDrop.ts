@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
-export function useFileDrop(onDrop: (paths: string[]) => void, allowedExtensions?: string[]) {
+export function useFileDrop(
+  onDrop: (paths: string[]) => void,
+  allowedExtensions?: string[],
+  onReject?: () => void
+) {
   const [isHovering, setIsHovering] = useState(false);
   const extDeps = allowedExtensions?.join(",") || "";
 
@@ -26,8 +30,15 @@ export function useFileDrop(onDrop: (paths: string[]) => void, allowedExtensions
                   const ext = p.split('.').pop()?.toLowerCase() || '';
                   return allowedExtensions.includes(ext);
                 });
+                
                 if (filtered.length > 0) {
                   onDrop(filtered);
+                  // Call onReject if some files were excluded
+                  if (filtered.length !== paths.length && onReject) {
+                    onReject();
+                  }
+                } else {
+                  if (onReject) onReject();
                 }
               } else {
                 onDrop(paths);
@@ -54,8 +65,7 @@ export function useFileDrop(onDrop: (paths: string[]) => void, allowedExtensions
         unlistenFn();
       }
     };
-  }, [onDrop, extDeps]); // Menggunakan string dependency agar tidak rerender saat array baru dipassing
+  }, [onDrop, extDeps, onReject]);
 
   return { isHovering };
 }
-

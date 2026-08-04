@@ -6,7 +6,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            commands::text_to_pdf,
             commands::images_to_pdf,
             commands::merge_pdfs,
             commands::split_pdf,
