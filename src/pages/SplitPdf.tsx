@@ -28,7 +28,7 @@ export default function SplitPdf() {
   const previewRef = useRef<HTMLDivElement>(null);
   const previewToken = useRef(0);
   const { showToast } = useToast();
-  const { t } = useSettings();
+  const { t, openExplorer } = useSettings();
 
   const loadPdf = useCallback(async (p: string) => {
     setFilePath(p);
@@ -181,6 +181,9 @@ export default function SplitPdf() {
     try {
       await invoke("split_pdf", { inputPath: filePath, pages: selectedPages.sort((a,b)=>a-b), outputPath: path });
       showToast("success", `PDF berhasil diekstrak: ${path}`);
+      if (openExplorer) {
+        invoke("show_in_folder", { path }).catch(e => console.error(e));
+      }
     } catch (e) {
       showToast("error", `Gagal mengekstrak PDF: ${e}`);
     }

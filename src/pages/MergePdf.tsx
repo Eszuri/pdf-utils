@@ -20,7 +20,7 @@ export default function MergePdf() {
   const { mergePdfFiles: pdfs, setMergePdfFiles: setPdfs } = useToolState();
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
-  const { t } = useSettings();
+  const { t, openExplorer } = useSettings();
 
   const handleFileDrop = useCallback(async (paths: string[]) => {
     if (paths.length > 0) {
@@ -91,6 +91,9 @@ export default function MergePdf() {
       const paths = pdfs.map((p) => p.path);
       await invoke("merge_pdfs", { pdfPaths: paths, outputPath: savePath });
       showToast("success", `PDF berhasil digabung ke: ${savePath}`);
+      if (openExplorer) {
+        invoke("show_in_folder", { path: savePath }).catch(e => console.error(e));
+      }
     } catch (e: any) {
       showToast("error", `Error: ${e}`);
     }

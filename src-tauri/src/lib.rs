@@ -11,8 +11,8 @@ pub fn run() {
             commands::split_pdf,
             commands::get_pdf_info,
             commands::read_pdf_bytes,
-            commands::write_file_bytes,
             commands::pdf_to_docx,
+            commands::show_in_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

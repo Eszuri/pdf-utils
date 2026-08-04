@@ -268,3 +268,35 @@ pub fn pdf_to_docx(input_path: String, output_path: String) -> Result<(), String
 
     Ok(())
 }
+
+#[tauri::command]
+pub fn show_in_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open finder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            std::process::Command::new("xdg-open")
+                .arg(parent)
+                .spawn()
+                .map_err(|e| format!("Failed to open file manager: {}", e))?;
+        }
+    }
+    
+    Ok(())
+}
+

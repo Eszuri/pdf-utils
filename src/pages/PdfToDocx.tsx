@@ -20,7 +20,7 @@ export default function PdfToDocx() {
   const { pdfToDocxFile: file, setPdfToDocxFile: setFile } = useToolState();
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
-  const { t } = useSettings();
+  const { t, openExplorer } = useSettings();
 
   const handleFileDrop = useCallback(async (paths: string[]) => {
     if (paths.length > 0) {
@@ -71,6 +71,9 @@ export default function PdfToDocx() {
     try {
       await invoke("pdf_to_docx", { inputPath: file.path, outputPath: savePath });
       showToast("success", `Berhasil dikonversi ke: ${savePath}`);
+      if (openExplorer) {
+        invoke("show_in_folder", { path: savePath }).catch(e => console.error(e));
+      }
     } catch (e: any) {
       showToast("error", `Gagal mengonversi: ${e}`);
     }

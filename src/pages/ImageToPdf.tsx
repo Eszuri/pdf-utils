@@ -14,7 +14,7 @@ export default function ImageToPdf() {
   const [loading, setLoading] = useState(false);
   const [zoomImg, setZoomImg] = useState<ImageItem | null>(null);
   const { showToast } = useToast();
-  const { t } = useSettings();
+  const { t, openExplorer } = useSettings();
 
   const handleFileDrop = useCallback(async (paths: string[]) => {
     if (paths.length > 0) {
@@ -103,6 +103,9 @@ export default function ImageToPdf() {
       const paths = images.map((img) => img.path);
       await invoke("images_to_pdf", { imagePaths: paths, outputPath: savePath });
       showToast("success", `PDF berhasil disimpan ke: ${savePath}`);
+      if (openExplorer) {
+        invoke("show_in_folder", { path: savePath }).catch(e => console.error(e));
+      }
     } catch (e: any) {
       showToast("error", `Error: ${e}`);
     }

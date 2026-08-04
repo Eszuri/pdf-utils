@@ -6,6 +6,8 @@ interface SettingsContextType {
   setLanguage: (lang: Language) => void;
   accentColor: string;
   setAccentColor: (color: string) => void;
+  openExplorer: boolean;
+  setOpenExplorer: (val: boolean) => void;
   t: (key: TranslationKey) => string;
 }
 
@@ -14,6 +16,8 @@ const defaultContext: SettingsContextType = {
   setLanguage: () => {},
   accentColor: "indigo",
   setAccentColor: () => {},
+  openExplorer: true,
+  setOpenExplorer: () => {},
   t: (key) => key,
 };
 
@@ -40,9 +44,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem("app_accent") || "indigo";
   });
 
+  const [openExplorer, setOpenExplorer] = useState<boolean>(() => {
+    const val = localStorage.getItem("app_open_explorer");
+    return val !== null ? val === "true" : true;
+  });
+
   useEffect(() => {
     localStorage.setItem("app_lang", language);
   }, [language]);
+
+  useEffect(() => {
+    localStorage.setItem("app_open_explorer", String(openExplorer));
+  }, [openExplorer]);
 
   useEffect(() => {
     localStorage.setItem("app_accent", accentColor);
@@ -64,7 +77,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SettingsContext.Provider value={{ language, setLanguage, accentColor, setAccentColor, t }}>
+    <SettingsContext.Provider value={{ language, setLanguage, accentColor, setAccentColor, openExplorer, setOpenExplorer, t }}>
       {children}
     </SettingsContext.Provider>
   );

@@ -1,6 +1,12 @@
 export default {
   "app.title": "PDF Utils",
   "app.desc": "Alat PDF sederhana untuk kebutuhan sehari-hari",
+  "settings.lang": "Bahasa",
+  "settings.accent": "Warna Tema",
+  "settings.openExplorer": "Buka File Explorer Setelah Export",
+  "settings.openExplorerDesc": "Secara otomatis membuka folder dan menyorot file yang baru saja dibuat setelah proses selesai.",
+  "settings.on": "Nyala",
+  "settings.off": "Mati",
   "nav.tools": "Alat",
   "nav.imageToPdf": "Image → PDF",
   "nav.mergePdf": "Merge PDF",

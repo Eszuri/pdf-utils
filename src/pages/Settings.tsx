@@ -4,7 +4,7 @@ import { useSettings, accentColors } from "../contexts/SettingsContext";
 import "../styles/Converter.css";
 
 export default function Settings() {
-  const { language, setLanguage, accentColor, setAccentColor, t } = useSettings();
+  const { language, setLanguage, accentColor, setAccentColor, openExplorer, setOpenExplorer, t } = useSettings();
   const [activeTab, setActiveTab] = useState<"general" | "style">("general");
 
   return (
@@ -89,6 +89,60 @@ export default function Settings() {
                     <option value="id">Bahasa Indonesia</option>
                     <option value="en">English</option>
                   </select>
+                </div>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ maxWidth: "70%" }}>
+                    <h3 style={{ fontSize: "15px", marginBottom: "4px", color: "var(--text-primary)" }}>{t("settings.openExplorer")}</h3>
+                    <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t("settings.openExplorerDesc")}</p>
+                  </div>
+                  <label style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    cursor: "pointer"
+                  }}>
+                    <span style={{ fontSize: "13px", color: "var(--text-muted)", userSelect: "none" }}>
+                      {openExplorer ? t("settings.on") : t("settings.off")}
+                    </span>
+                    <div style={{
+                      position: "relative",
+                      width: "44px",
+                      height: "24px",
+                      background: openExplorer ? "var(--accent)" : "var(--bg-elevated)",
+                      borderRadius: "12px",
+                      transition: "background 0.2s",
+                      border: "1px solid var(--border-color)"
+                    }}>
+                      <motion.div
+                        layout
+                        initial={false}
+                        animate={{
+                          x: openExplorer ? 20 : 2
+                        }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 500,
+                          damping: 30
+                        }}
+                        style={{
+                          position: "absolute",
+                          top: "2px",
+                          width: "18px",
+                          height: "18px",
+                          background: "#fff",
+                          borderRadius: "50%",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.3)"
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="checkbox"
+                      style={{ display: "none" }}
+                      checked={openExplorer}
+                      onChange={(e) => setOpenExplorer(e.target.checked)}
+                    />
+                  </label>
                 </div>
               </motion.div>
             )}
