@@ -1,6 +1,6 @@
 use printpdf::{
-    BuiltinFont, Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, Point, Pt, RawImage, RawImageData,
-    RawImageFormat, TextItem, XObjectTransform,
+    Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, Pt, RawImage, RawImageData,
+    RawImageFormat, XObjectTransform,
 };
 use lopdf::{Document, Object};
 use std::collections::HashMap;
@@ -223,10 +223,6 @@ pub fn read_pdf_bytes(path: String) -> Result<Vec<u8>, String> {
     std::fs::read(&path).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub fn write_file_bytes(output_path: String, bytes: Vec<u8>) -> Result<(), String> {
-    std::fs::write(&output_path, &bytes).map_err(|e| e.to_string())
-}
 
 #[tauri::command]
 pub fn pdf_to_docx(input_path: String, output_path: String) -> Result<(), String> {
