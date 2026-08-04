@@ -6,6 +6,7 @@ import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
 import { useSettings } from "../contexts/SettingsContext";
+import { useToolState } from "../contexts/ToolStateContext";
 import "../styles/Converter.css";
 import "./Viewer.css";
 
@@ -27,7 +28,7 @@ export default function Viewer() {
   const [pages, setPages] = useState<PageText[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [filePath, setFilePath] = useState("");
+  const { viewerFilePath: filePath, setViewerFilePath: setFilePath } = useToolState();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ page: number; text: string }[] | null>(null);
   const activeSearchRef = useRef("");
@@ -80,20 +81,9 @@ export default function Viewer() {
     if (taskId !== renderTaskId.current) return;
   }, []);
 
-  useEffect(() => {
-    if (!pdf) return;
-    renderPage(pdf, currentPage);
-  }, [pdf, currentPage, renderKey]);
-
-  async function openPdf() {
-    const path = await open({
-      filters: [{ name: "PDF", extensions: ["pdf"] }],
-    });
-    if (!path) return;
-    const p = Array.isArray(path) ? path[0] : path;
-    setFilePath(p);
-
+  const loadPdf = useCallback(async (p: string) => {
     try {
+      setLoading(true);
       const data: number[] = await invoke("read_pdf_bytes", { path: p });
       const pdfData = new Uint8Array(data);
       const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
@@ -130,7 +120,30 @@ export default function Viewer() {
       setPageThumbs(thumbs);
     } catch (e) {
       showToast("error", `Gagal membuka PDF: ${e}`);
+    } finally {
+      setLoading(false);
     }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (filePath && !pdf && !loading) {
+      loadPdf(filePath);
+    }
+  }, [filePath, pdf, loading, loadPdf]);
+
+  useEffect(() => {
+    if (!pdf) return;
+    renderPage(pdf, currentPage);
+  }, [pdf, currentPage, renderKey, renderPage]);
+
+  async function openPdf() {
+    const path = await open({
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    });
+    if (!path) return;
+    const p = Array.isArray(path) ? path[0] : path;
+    setFilePath(p);
+    // Let useEffect handle loading
   }
 
   function updateScale(newScale: number) {

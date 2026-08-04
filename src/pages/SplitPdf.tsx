@@ -5,13 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { useSettings } from "../contexts/SettingsContext";
+import { useToolState } from "../contexts/ToolStateContext";
 import "../styles/Converter.css";
-
-interface PdfItem {
-  path: string;
-  name: string;
-  size: string;
-}
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 B";
@@ -22,8 +17,7 @@ function formatBytes(bytes: number) {
 }
 
 export default function SplitPdf() {
-  const [file, setFile] = useState<PdfItem | null>(null);
-  const [pages, setPages] = useState("");
+  const { splitPdfFile: file, setSplitPdfFile: setFile, splitPdfPages: pages, setSplitPdfPages: setPages } = useToolState();
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
   const { t } = useSettings();

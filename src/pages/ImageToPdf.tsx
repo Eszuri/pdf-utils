@@ -5,17 +5,12 @@ import { motion, Reorder, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { useSettings } from "../contexts/SettingsContext";
+import { useToolState, ImageItem } from "../contexts/ToolStateContext";
 import "./ImageToPdf.css";
 import "../styles/Converter.css";
 
-interface ImageItem {
-  path: string;
-  name: string;
-  dataUrl: string;
-}
-
 export default function ImageToPdf() {
-  const [images, setImages] = useState<ImageItem[]>([]);
+  const { imgToPdfImages: images, setImgToPdfImages: setImages } = useToolState();
   const [loading, setLoading] = useState(false);
   const [zoomImg, setZoomImg] = useState<ImageItem | null>(null);
   const { showToast } = useToast();

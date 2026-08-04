@@ -5,13 +5,8 @@ import { motion, Reorder, AnimatePresence } from "framer-motion";
 import { useToast } from "../components/Toast";
 import { useFileDrop } from "../hooks/useFileDrop";
 import { useSettings } from "../contexts/SettingsContext";
+import { useToolState } from "../contexts/ToolStateContext";
 import "../styles/Converter.css";
-
-interface PdfItem {
-  path: string;
-  name: string;
-  size: string;
-}
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 B";
@@ -22,7 +17,7 @@ function formatBytes(bytes: number) {
 }
 
 export default function MergePdf() {
-  const [pdfs, setPdfs] = useState<PdfItem[]>([]);
+  const { mergePdfFiles: pdfs, setMergePdfFiles: setPdfs } = useToolState();
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
   const { t } = useSettings();
