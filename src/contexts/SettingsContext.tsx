@@ -8,6 +8,8 @@ interface SettingsContextType {
   setAccentColor: (color: string) => void;
   openExplorer: boolean;
   setOpenExplorer: (val: boolean) => void;
+  pdfContextMenu: boolean;
+  setPdfContextMenu: (val: boolean) => void;
   t: (key: TranslationKey) => string;
 }
 
@@ -18,6 +20,8 @@ const defaultContext: SettingsContextType = {
   setAccentColor: () => {},
   openExplorer: true,
   setOpenExplorer: () => {},
+  pdfContextMenu: false,
+  setPdfContextMenu: () => {},
   t: (key) => key,
 };
 
@@ -49,6 +53,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return val !== null ? val === "true" : true;
   });
 
+  const [pdfContextMenu, setPdfContextMenu] = useState<boolean>(() => {
+    return localStorage.getItem("app_pdf_context_menu") === "true";
+  });
+
   useEffect(() => {
     localStorage.setItem("app_lang", language);
   }, [language]);
@@ -56,6 +64,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem("app_open_explorer", String(openExplorer));
   }, [openExplorer]);
+
+  useEffect(() => {
+    localStorage.setItem("app_pdf_context_menu", String(pdfContextMenu));
+    import("@tauri-apps/api/core").then(({ invoke }) => {
+      invoke("toggle_context_menu", { enable: pdfContextMenu }).catch(console.error);
+    });
+  }, [pdfContextMenu]);
 
   useEffect(() => {
     localStorage.setItem("app_accent", accentColor);
@@ -77,7 +92,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SettingsContext.Provider value={{ language, setLanguage, accentColor, setAccentColor, openExplorer, setOpenExplorer, t }}>
+    <SettingsContext.Provider value={{ language, setLanguage, accentColor, setAccentColor, openExplorer, setOpenExplorer, pdfContextMenu, setPdfContextMenu, t }}>
       {children}
     </SettingsContext.Provider>
   );

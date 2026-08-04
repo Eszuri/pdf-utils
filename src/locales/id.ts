@@ -7,6 +7,8 @@ export default {
   "settings.openExplorerDesc": "Secara otomatis membuka folder dan menyorot file yang baru saja dibuat setelah proses selesai.",
   "settings.on": "Nyala",
   "settings.off": "Mati",
+  "settings.contextMenu": "Menu Konteks Windows",
+  "settings.contextMenuDesc": "Tambahkan opsi 'PDF to Word' saat klik kanan file PDF di File Explorer (proses di latar belakang).",
   "nav.tools": "Alat",
   "nav.imageToPdf": "Image → PDF",
   "nav.mergePdf": "Merge PDF",

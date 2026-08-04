@@ -296,3 +296,31 @@ pub fn show_in_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+
+#[tauri::command]
+pub fn toggle_context_menu(enable: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsToWord";
+        
+        if enable {
+            let (key, _) = hkcu.create_subkey(path).map_err(|e| e.to_string())?;
+            key.set_value("", &"PDF to Word (PDF Utils)").map_err(|e| e.to_string())?;
+            key.set_value("Icon", &"shell32.dll,-167").unwrap_or(()); // optional icon
+            
+            let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+            let exe_str = exe_path.to_string_lossy();
+            
+            let (command_key, _) = key.create_subkey("command").map_err(|e| e.to_string())?;
+            let command_val = format!("\"{}\" --context-pdf2word \"%1\"", exe_str);
+            command_key.set_value("", &command_val).map_err(|e| e.to_string())?;
+        } else {
+            let _ = hkcu.delete_subkey_all(path);
+        }
+    }
+    Ok(())
+}
+

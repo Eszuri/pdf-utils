@@ -27,6 +27,7 @@ printpdf = { version = "0.8", default-features = false, features = ["png", "jpeg
 lopdf = { version = "0.34", features = ["embed_image"] }
 image = "0.25"
 time = { version = ">=0.3.36, <0.3.47", features = [] }
+winreg = "0.56.0"
 
 
 [profile.release]

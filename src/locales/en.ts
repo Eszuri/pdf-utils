@@ -12,6 +12,8 @@ export default {
   "settings.openExplorerDesc": "Automatically open the folder and highlight the newly created file after a process completes.",
   "settings.on": "On",
   "settings.off": "Off",
+  "settings.contextMenu": "Windows Context Menu",
+  "settings.contextMenuDesc": "Add 'PDF to Word' option when right-clicking PDF files in File Explorer (runs in background).",
   "nav.viewer": "PDF Viewer",
   "nav.settings": "Settings",
   "home.desc.image": "Convert images to PDF",
