@@ -1,15 +1,27 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { motion } from "framer-motion";
 import { useToast } from "../components/Toast";
-import "./PdfToDocx.css";
+import { useFileDrop } from "../hooks/useFileDrop";
+import "../styles/Converter.css";
 
 export default function PdfToDocx() {
   const [filePath, setFilePath] = useState("");
   const [fileName, setFileName] = useState("");
   const [converting, setConverting] = useState(false);
   const { showToast } = useToast();
+
+  const handleFileDrop = useCallback((paths: string[]) => {
+    if (paths.length > 0) {
+      const p = paths[0];
+      const name = p.split("\\").pop() || p.split("/").pop() || p;
+      setFilePath(p);
+      setFileName(name);
+    }
+  }, []);
+
+  const { isHovering } = useFileDrop(handleFileDrop, ["pdf"]);
 
   async function handleSelectPdf() {
     try {
@@ -57,7 +69,7 @@ export default function PdfToDocx() {
 
   return (
     <motion.div
-      className="pdf-to-docx-page"
+      className="converter-page"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}
@@ -71,7 +83,7 @@ export default function PdfToDocx() {
 
       <div className="converter-card">
         <div
-          className={`drop-zone ${filePath ? "has-file" : ""}`}
+          className={`drop-zone ${filePath ? "has-file" : ""} ${isHovering ? "is-hovering" : ""}`}
           onClick={handleSelectPdf}
         >
           {filePath ? (
@@ -84,8 +96,8 @@ export default function PdfToDocx() {
           ) : (
             <>
               <div className="file-icon">📂</div>
-              <h3>Pilih File PDF</h3>
-              <p>Klik untuk memilih dokumen PDF yang ingin dikonversi</p>
+              <h3>Pilih atau Drop File PDF</h3>
+              <p>Klik atau seret dokumen PDF ke area ini</p>
             </>
           )}
         </div>
@@ -112,3 +124,4 @@ export default function PdfToDocx() {
     </motion.div>
   );
 }
+
