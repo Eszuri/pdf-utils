@@ -38,6 +38,16 @@ export default function Layout() {
               <span className="nav-text">{item.label}</span>
             </NavLink>
           ))}
+          
+          <div style={{ marginTop: "auto" }}>
+            <NavLink
+              to="/settings"
+              className={({ isActive }) => `nav-item ${isActive ? "active" : ""}`}
+            >
+              <span className="nav-icon">⚙️</span>
+              <span className="nav-text">Pengaturan</span>
+            </NavLink>
+          </div>
         </nav>
 
         <div className="sidebar-footer">
