@@ -283,6 +283,52 @@ pub fn find_standalone_engine(app: &tauri::AppHandle) -> Option<PathBuf> {
     None
 }
 
+pub fn find_converter_script(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let script_name = "converter_cli.py";
+
+    // 1. Check in Tauri resource directory
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let candidate = resource_dir.join("resources").join(script_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        let candidate2 = resource_dir.join(script_name);
+        if candidate2.is_file() {
+            return Some(candidate2);
+        }
+    }
+
+    // 2. Check next to current running executable
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(parent) = current_exe.parent() {
+            let candidate = parent.join(script_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+            let candidate_res = parent.join("resources").join(script_name);
+            if candidate_res.is_file() {
+                return Some(candidate_res);
+            }
+        }
+    }
+
+    // 3. Check development paths relative to current directory
+    let dev_candidates = [
+        PathBuf::from("src-tauri").join("resources").join(script_name),
+        PathBuf::from("resources").join(script_name),
+        PathBuf::from("scripts").join(script_name),
+        PathBuf::from("..").join("scripts").join(script_name),
+        PathBuf::from("..").join("src-tauri").join("resources").join(script_name),
+    ];
+    for dev_path in &dev_candidates {
+        if dev_path.is_file() {
+            return Some(dev_path.clone());
+        }
+    }
+
+    None
+}
+
 #[tauri::command]
 pub fn get_converter_status(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     if let Some(path) = find_standalone_engine(&app) {
@@ -314,7 +360,7 @@ pub fn get_converter_status(app: tauri::AppHandle) -> Result<serde_json::Value, 
             check_cmd.creation_flags(0x08000000);
         }
         let check = check_cmd
-            .args(["-c", "import pdf2docx"])
+            .args(["-c", "import pdf2docx, fitz, docx"])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
@@ -323,13 +369,13 @@ pub fn get_converter_status(app: tauri::AppHandle) -> Result<serde_json::Value, 
             return Ok(serde_json::json!({
                 "ready": true,
                 "engine_type": "python",
-                "message": "Python Sistem Siap (pdf2docx terdeteksi)"
+                "message": "Python Sistem Siap (pdf2docx, PyMuPDF, docx terdeteksi)"
             }));
         } else {
             return Ok(serde_json::json!({
                 "ready": false,
                 "engine_type": "python_missing_deps",
-                "message": "Python terdeteksi tetapi modul 'pdf2docx' belum terpasang."
+                "message": "Python terdeteksi tetapi modul konversi belum lengkap."
             }));
         }
     }
@@ -422,21 +468,25 @@ pub fn pdf_to_docx(app: tauri::AppHandle, input_path: String, output_path: Strin
         })
         .ok_or_else(|| "Engine konversi tidak ditemukan. Silakan bangun standalone engine atau instal Python.".to_string())?;
 
-    let script = format!(
-        "from pdf2docx import Converter; cv = Converter(r'{}'); cv.convert(r'{}'); cv.close()",
-        input_path.replace('\'', "\\'"),
-        output_path.replace('\'', "\\'")
-    );
-
     let mut cmd = std::process::Command::new(python);
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x08000000);
     }
+
+    if let Some(script_path) = find_converter_script(&app) {
+        cmd.arg(script_path).arg(&input_path).arg(&output_path);
+    } else {
+        let script = format!(
+            "from pdf2docx import Converter; cv = Converter(r'{}'); cv.convert(r'{}'); cv.close()",
+            input_path.replace('\'', "\\'"),
+            output_path.replace('\'', "\\'")
+        );
+        cmd.arg("-c").arg(&script);
+    }
+
     let output = cmd
-        .arg("-c")
-        .arg(&script)
         .output()
         .map_err(|e| format!("Gagal menjalankan Python: {}", e))?;
 
@@ -444,7 +494,7 @@ pub fn pdf_to_docx(app: tauri::AppHandle, input_path: String, output_path: Strin
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stderr_trimmed = stderr.trim();
         if stderr_trimmed.contains("No module named") || stderr_trimmed.contains("ModuleNotFoundError") {
-            return Err("Modul Python belum lengkap. Gunakan tombol 'Pasang Otomatis' atau jalankan: pip install pdf2docx".to_string());
+            return Err("Modul Python belum lengkap. Gunakan tombol 'Pasang Otomatis' atau jalankan: pip install pdf2docx PyMuPDF python-docx".to_string());
         }
         return Err(format!("Konversi gagal: {}", stderr_trimmed));
     }
