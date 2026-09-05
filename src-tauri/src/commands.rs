@@ -4,6 +4,8 @@ use printpdf::{
 };
 use lopdf::{Document, Object};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use tauri::Manager;
 
 fn remap_references(obj: &Object, id_map: &HashMap<(u32, u16), (u32, u16)>) -> Object {
     match obj {
@@ -62,12 +64,25 @@ pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> Result<()
             tag: Vec::new(),
         };
 
-        let max_width_mm = 170.0;
-        let scale = max_width_mm / w as f32;
+        let is_landscape = w > h;
+        let (page_w_mm, page_h_mm) = if is_landscape {
+            (297.0, 210.0)
+        } else {
+            (210.0, 297.0)
+        };
+
+        let margin_mm = 15.0;
+        let max_w_mm = page_w_mm - (2.0 * margin_mm);
+        let max_h_mm = page_h_mm - (2.0 * margin_mm);
+
+        let scale_w = max_w_mm / w as f32;
+        let scale_h = max_h_mm / h as f32;
+        let scale = scale_w.min(scale_h);
+
         let img_width_mm = w as f32 * scale;
         let img_height_mm = h as f32 * scale;
-        let x_mm = (210.0 - img_width_mm) / 2.0;
-        let y_mm = (297.0 - img_height_mm) / 2.0;
+        let x_mm = (page_w_mm - img_width_mm) / 2.0;
+        let y_mm = (page_h_mm - img_height_mm) / 2.0;
 
         let img_width_pt = img_width_mm * 72.0 / 25.4;
         let img_height_pt = img_height_mm * 72.0 / 25.4;
@@ -86,7 +101,7 @@ pub fn images_to_pdf(image_paths: Vec<String>, output_path: String) -> Result<()
             },
         }];
 
-        pages.push(PdfPage::new(Mm(210.0), Mm(297.0), ops));
+        pages.push(PdfPage::new(Mm(page_w_mm), Mm(page_h_mm), ops));
     }
 
     let bytes = doc
@@ -224,21 +239,188 @@ pub fn read_pdf_bytes(path: String) -> Result<Vec<u8>, String> {
 }
 
 
-#[tauri::command]
-pub fn pdf_to_docx(input_path: String, output_path: String) -> Result<(), String> {
-    // Use pdf2docx Python library for high-quality PDF to DOCX conversion
-    let python_paths = ["python", "python3", "py"];
+pub fn find_standalone_engine(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let bin_name = if cfg!(windows) { "pdf2docx-engine.exe" } else { "pdf2docx-engine" };
 
+    // 1. Check in Tauri resource directory
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        let candidate = resource_dir.join("resources").join(bin_name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+        let candidate2 = resource_dir.join(bin_name);
+        if candidate2.is_file() {
+            return Some(candidate2);
+        }
+    }
+
+    // 2. Check next to current running executable
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(parent) = current_exe.parent() {
+            let candidate = parent.join(bin_name);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+            let candidate_res = parent.join("resources").join(bin_name);
+            if candidate_res.is_file() {
+                return Some(candidate_res);
+            }
+        }
+    }
+
+    // 3. Check development paths relative to current directory
+    let dev_candidates = [
+        PathBuf::from("src-tauri").join("resources").join(bin_name),
+        PathBuf::from("resources").join(bin_name),
+        PathBuf::from("..").join("src-tauri").join("resources").join(bin_name),
+    ];
+    for dev_path in &dev_candidates {
+        if dev_path.is_file() {
+            return Some(dev_path.clone());
+        }
+    }
+
+    None
+}
+
+#[tauri::command]
+pub fn get_converter_status(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    if let Some(path) = find_standalone_engine(&app) {
+        return Ok(serde_json::json!({
+            "ready": true,
+            "engine_type": "standalone",
+            "path": path.to_string_lossy(),
+            "message": "Standalone Engine Siap (Zero Configuration)"
+        }));
+    }
+
+    let python_paths = ["python", "python3", "py"];
+    if let Some(python) = python_paths.iter().find(|p| {
+        let mut cmd = std::process::Command::new(p);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        cmd.arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }) {
+        let mut check_cmd = std::process::Command::new(python);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            check_cmd.creation_flags(0x08000000);
+        }
+        let check = check_cmd
+            .args(["-c", "import pdf2docx"])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+
+        if check {
+            return Ok(serde_json::json!({
+                "ready": true,
+                "engine_type": "python",
+                "message": "Python Sistem Siap (pdf2docx terdeteksi)"
+            }));
+        } else {
+            return Ok(serde_json::json!({
+                "ready": false,
+                "engine_type": "python_missing_deps",
+                "message": "Python terdeteksi tetapi modul 'pdf2docx' belum terpasang."
+            }));
+        }
+    }
+
+    Ok(serde_json::json!({
+        "ready": false,
+        "engine_type": "none",
+        "message": "Engine mandiri atau Python tidak ditemukan."
+    }))
+}
+
+#[tauri::command]
+pub fn auto_setup_dependencies() -> Result<String, String> {
+    let python_paths = ["python", "python3", "py"];
+    let python = python_paths.iter().find(|p| {
+        let mut cmd = std::process::Command::new(p);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        cmd.arg("--version")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }).ok_or_else(|| "Python tidak ditemukan di sistem.".to_string())?;
+
+    let mut cmd = std::process::Command::new(python);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let output = cmd
+        .args(["-m", "pip", "install", "pdf2docx", "PyMuPDF", "python-docx"])
+        .output()
+        .map_err(|e| format!("Gagal menjalankan pip: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Instalasi modul gagal: {}", stderr.trim()));
+    }
+
+    Ok("Dependensi berhasil dipasang otomatis!".to_string())
+}
+
+#[tauri::command]
+pub fn pdf_to_docx(app: tauri::AppHandle, input_path: String, output_path: String) -> Result<(), String> {
+    // Priority 1: Standalone engine (100% Zero-Configuration)
+    if let Some(engine_path) = find_standalone_engine(&app) {
+        let mut cmd = std::process::Command::new(engine_path);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000);
+        }
+        let output = cmd
+            .arg(&input_path)
+            .arg(&output_path)
+            .output()
+            .map_err(|e| format!("Gagal menjalankan standalone engine: {}", e))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("Konversi gagal: {}", stderr.trim()));
+        }
+
+        if !std::path::Path::new(&output_path).exists() {
+            return Err("File docx hasil konversi tidak ditemukan.".to_string());
+        }
+
+        return Ok(());
+    }
+
+    // Priority 2: Fallback to system Python
+    let python_paths = ["python", "python3", "py"];
     let python = python_paths
         .iter()
         .find(|p| {
-            std::process::Command::new(p)
-                .arg("--version")
+            let mut cmd = std::process::Command::new(p);
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000);
+            }
+            cmd.arg("--version")
                 .output()
                 .map(|o| o.status.success())
                 .unwrap_or(false)
         })
-        .ok_or_else(|| "Python tidak ditemukan. Install Python terlebih dahulu.".to_string())?;
+        .ok_or_else(|| "Engine konversi tidak ditemukan. Silakan bangun standalone engine atau instal Python.".to_string())?;
 
     let script = format!(
         "from pdf2docx import Converter; cv = Converter(r'{}'); cv.convert(r'{}'); cv.close()",
@@ -246,7 +428,13 @@ pub fn pdf_to_docx(input_path: String, output_path: String) -> Result<(), String
         output_path.replace('\'', "\\'")
     );
 
-    let output = std::process::Command::new(python)
+    let mut cmd = std::process::Command::new(python);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+    let output = cmd
         .arg("-c")
         .arg(&script)
         .output()
@@ -254,10 +442,13 @@ pub fn pdf_to_docx(input_path: String, output_path: String) -> Result<(), String
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Konversi gagal: {}", stderr.trim()));
+        let stderr_trimmed = stderr.trim();
+        if stderr_trimmed.contains("No module named") || stderr_trimmed.contains("ModuleNotFoundError") {
+            return Err("Modul Python belum lengkap. Gunakan tombol 'Pasang Otomatis' atau jalankan: pip install pdf2docx".to_string());
+        }
+        return Err(format!("Konversi gagal: {}", stderr_trimmed));
     }
 
-    // Verify output file was created
     if !std::path::Path::new(&output_path).exists() {
         return Err("File docx hasil konversi tidak ditemukan.".to_string());
     }

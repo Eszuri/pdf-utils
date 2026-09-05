@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,11 +16,45 @@ function formatBytes(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
+interface EngineStatus {
+  ready: boolean;
+  engine_type: "standalone" | "python" | "python_missing_deps" | "none";
+  message: string;
+}
+
 export default function PdfToDocx() {
   const { pdfToDocxFile: file, setPdfToDocxFile: setFile } = useToolState();
   const [loading, setLoading] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [engineStatus, setEngineStatus] = useState<EngineStatus | null>(null);
   const { showToast } = useToast();
   const { t, openExplorer } = useSettings();
+
+  const checkStatus = useCallback(async () => {
+    try {
+      const res: any = await invoke("get_converter_status");
+      setEngineStatus(res);
+    } catch (e) {
+      console.error("Failed to check converter status", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkStatus();
+  }, [checkStatus]);
+
+  async function handleAutoInstall() {
+    setInstalling(true);
+    try {
+      showToast("info", t("pdfToWord.installing"));
+      await invoke("auto_setup_dependencies");
+      showToast("success", "Dependensi berhasil dipasang!");
+      await checkStatus();
+    } catch (e: any) {
+      showToast("error", `Gagal memasang otomatis: ${e}`);
+    }
+    setInstalling(false);
+  }
 
   const handleFileDrop = useCallback(async (paths: string[]) => {
     if (paths.length > 0) {
@@ -93,6 +127,50 @@ export default function PdfToDocx() {
           <p className="sub-title">{t("pdfToWord.desc")}</p>
         </div>
       </div>
+
+      {engineStatus && (
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "10px 16px",
+          marginBottom: "16px",
+          borderRadius: "var(--radius)",
+          background: engineStatus.ready ? "rgba(16, 185, 129, 0.08)" : "rgba(245, 158, 11, 0.1)",
+          border: `1px solid ${engineStatus.ready ? "rgba(16, 185, 129, 0.25)" : "rgba(245, 158, 11, 0.3)"}`,
+          fontSize: "13px"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>{engineStatus.ready ? "⚡" : "⚠️"}</span>
+            <span style={{ color: "var(--text-primary)", fontWeight: 500 }}>
+              {engineStatus.engine_type === "standalone"
+                ? t("pdfToWord.statusStandalone")
+                : engineStatus.engine_type === "python"
+                ? t("pdfToWord.statusPython")
+                : t("pdfToWord.statusMissing")}
+            </span>
+          </div>
+
+          {engineStatus.engine_type === "python_missing_deps" && (
+            <button
+              className="btn-secondary"
+              onClick={handleAutoInstall}
+              disabled={installing || loading}
+              style={{
+                padding: "4px 14px",
+                fontSize: "12px",
+                background: "var(--accent)",
+                color: "white",
+                border: "none",
+                cursor: "pointer",
+                borderRadius: "6px"
+              }}
+            >
+              {installing ? "⏳ Memasang..." : t("pdfToWord.btnAutoInstall")}
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="converter-card" style={{ position: "relative", pointerEvents: loading ? "none" : "auto", opacity: loading ? 0.7 : 1 }}>
         {isHovering && !loading && !file && (

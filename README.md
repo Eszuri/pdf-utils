@@ -21,14 +21,14 @@
 
 Untuk menjalankan atau melakukan kompilasi (*build*) aplikasi ini dari kode sumber (*source code*), sistem Anda harus memenuhi beberapa persyaratan berikut:
 
-### Persyaratan untuk Pengguna (User)
+### Persyaratan untuk Pengguna (User - Production)
 - Sistem Operasi: Windows 10/11, macOS, atau Linux.
-- **Python 3.x**: Wajib terinstal di sistem Anda **khusus** untuk fitur konversi *PDF to Word*.
-- Modul Python `pdf2docx`: Dibutuhkan oleh mesin konversi (jalankan perintah `pip install pdf2docx` di terminal/CMD).
+- **Zero-Configuration**: Aplikasi siap pakai langsung (*out-of-the-box*). Seluruh modul pemroses telah dibundel ke dalam aplikasi (termasuk engine PDF to Word), sehingga pengguna **tidak memerlukan instalasi Python atau konfigurasi manual apa pun**.
 
 ### Persyaratan untuk Developer (Development)
 - **Node.js** (v18 atau lebih baru) dan npm/yarn/pnpm.
 - **Rust & Cargo** (v1.75 atau lebih baru): [Cara instalasi Rust](https://www.rust-lang.org/tools/install).
+- **Python 3.x** & PyInstaller (opsional untuk developer yang ingin merakit standalone engine dengan menjalankan `scripts/build-engine.bat`).
 - (Khusus Windows) **Visual Studio C++ Build Tools** beserta komponen *Desktop development with C++*.
 - (Khusus macOS) **Xcode Command Line Tools** (`xcode-select --install`).
 - (Khusus Linux) **Dependensi sistem**: `libwebkit2gtk-4.0-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`.

@@ -89,7 +89,7 @@ export default function MergePdf() {
     setLoading(true);
     try {
       const paths = pdfs.map((p) => p.path);
-      await invoke("merge_pdfs", { pdfPaths: paths, outputPath: savePath });
+      await invoke("merge_pdfs", { inputPaths: paths, outputPath: savePath });
       showToast("success", `PDF berhasil digabung ke: ${savePath}`);
       if (openExplorer) {
         invoke("show_in_folder", { path: savePath }).catch(e => console.error(e));

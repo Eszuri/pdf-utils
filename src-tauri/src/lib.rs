@@ -17,7 +17,7 @@ pub fn run() {
                     let output_path = parent.join(format!("{}_convert.docx", stem)).to_string_lossy().into_owned();
                     
                     // Run conversion synchronously since we exit right after
-                    let _ = commands::pdf_to_docx(file_path.clone(), output_path.clone());
+                    let _ = commands::pdf_to_docx(app.handle().clone(), file_path.clone(), output_path.clone());
                     let _ = commands::show_in_folder(output_path);
                     
                     app.handle().exit(0);
@@ -39,6 +39,8 @@ pub fn run() {
             commands::get_pdf_info,
             commands::read_pdf_bytes,
             commands::pdf_to_docx,
+            commands::get_converter_status,
+            commands::auto_setup_dependencies,
             commands::show_in_folder,
             commands::toggle_context_menu,
         ])
