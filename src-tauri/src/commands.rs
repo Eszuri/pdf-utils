@@ -438,16 +438,10 @@ pub fn pdf_to_docx(app: tauri::AppHandle, input_path: String, output_path: Strin
             .output()
             .map_err(|e| format!("Gagal menjalankan standalone engine: {}", e))?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Konversi gagal: {}", stderr.trim()));
+        if output.status.success() && std::path::Path::new(&output_path).exists() {
+            return Ok(());
         }
-
-        if !std::path::Path::new(&output_path).exists() {
-            return Err("File docx hasil konversi tidak ditemukan.".to_string());
-        }
-
-        return Ok(());
+        // If standalone engine failed to run, fall through to Priority 2 (System Python)
     }
 
     // Priority 2: Fallback to system Python

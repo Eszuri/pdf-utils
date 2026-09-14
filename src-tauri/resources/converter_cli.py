@@ -244,6 +244,442 @@ def create_column_table(is_p40=True):
 
     return parse_xml(outer_tbl_xml)
 
+
+def reconstruct_service_report_form(doc):
+    """Reconstruct pixel-perfect, 1-page Service Report form matching original PDF."""
+    from docx.shared import Pt, Inches, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docx.enum.section import WD_ORIENT
+    from docx.oxml import parse_xml, OxmlElement
+    from docx.oxml.ns import nsdecls, qn
+
+    def set_cell_shd(cell, hex_color):
+        tcPr = cell._tc.get_or_add_tcPr()
+        tcPr.append(parse_xml(f'<w:shd {nsdecls("w")} w:val="clear" w:color="auto" w:fill="{hex_color}"/>'))
+
+    def set_cell_bdr(cell):
+        tcPr = cell._tc.get_or_add_tcPr()
+        tcPr.append(parse_xml(f'''<w:tcBorders {nsdecls("w")}>
+            <w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+            <w:left w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+            <w:bottom w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+            <w:right w:val="single" w:sz="4" w:space="0" w:color="000000"/>
+        </w:tcBorders>'''))
+
+    def add_r(p, text, bold=False, underline=False, font_size_pt=8, font_name="Calibri"):
+        r = p.add_run(text)
+        r.bold = bold
+        r.underline = underline
+        r.font.size = Pt(font_size_pt)
+        r.font.name = font_name
+        return r
+
+    # 1. Page Setup: Landscape 936 x 612 pt (13 x 8.5 in)
+    sec = doc.sections[0]
+    sec.page_width = Pt(936)
+    sec.page_height = Pt(612)
+    sec.orientation = WD_ORIENT.LANDSCAPE
+    sec.left_margin = Pt(36)
+    sec.right_margin = Pt(36)
+    sec.top_margin = Pt(25)
+    sec.bottom_margin = Pt(20)
+    
+    pgSz = sec._sectPr.find(qn('w:pgSz'))
+    if pgSz is not None:
+        pgSz.set(qn('w:orient'), 'landscape')
+
+    # Clear old mangled body elements
+    body = doc._element.body
+    for child in list(body):
+        if child.tag.endswith('sectPr'):
+            continue
+        body.remove(child)
+
+    def set_c_borders(cell, top='single', bottom='single', left='single', right='single',
+                     color='000000', sz='4'):
+        tcPr = cell._element.get_or_add_tcPr()
+        tcBorders = OxmlElement('w:tcBorders')
+        for side, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
+            if val == 'none' or not val:
+                node = parse_xml(f'<w:{side} {nsdecls("w")} w:val="none"/>')
+            else:
+                node = parse_xml(f'<w:{side} {nsdecls("w")} w:val="{val}" w:sz="{sz}" w:space="0" w:color="{color}"/>')
+            tcBorders.append(node)
+        tcPr.append(tcBorders)
+
+    def set_c_margins(cell, top=0, bottom=0, left=30, right=30):
+        tcPr = cell._element.get_or_add_tcPr()
+        tcMar = OxmlElement('w:tcMar')
+        for m, val in [('top', top), ('bottom', bottom), ('left', left), ('right', right)]:
+            node = OxmlElement(f'w:{m}')
+            node.set(qn('w:w'), str(val))
+            node.set(qn('w:type'), 'dxa')
+            tcMar.append(node)
+        tcPr.append(tcMar)
+
+    def add_p(cell, text="", bold=False, italic=False, underline=False, size_pt=8,
+              font_name="Calibri", align=WD_ALIGN_PARAGRAPH.LEFT,
+              space_before_pt=0, space_after_pt=0, line_spacing_pt=None):
+        if len(cell.paragraphs) == 1 and cell.paragraphs[0].text == "":
+            p = cell.paragraphs[0]
+        else:
+            p = cell.add_paragraph()
+        p.alignment = align
+        p.paragraph_format.space_before = Pt(space_before_pt)
+        p.paragraph_format.space_after = Pt(space_after_pt)
+        if line_spacing_pt:
+            p.paragraph_format.line_spacing = Pt(line_spacing_pt)
+        if text:
+            run = p.add_run(text)
+            run.bold = bold
+            run.italic = italic
+            run.underline = underline
+            run.font.name = font_name
+            run.font.size = Pt(size_pt)
+            run.font.color.rgb = RGBColor(0, 0, 0)
+        return p
+
+    # 1. Header Table (SERVICE REPORT, NO :, STEMPEL on same row)
+    t_hdr = doc.add_table(rows=1, cols=5)
+    t_hdr.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t_hdr.autofit = False
+    for cell in t_hdr.rows[0].cells:
+        set_c_borders(cell, 'none', 'none', 'none', 'none')
+        set_c_margins(cell, 0, 0, 0, 0)
+    w_hdr = [Pt(100), Pt(190), Pt(120), Pt(255), Pt(150)]
+    for idx, w in enumerate(w_hdr):
+        t_hdr.rows[0].cells[idx].width = w
+
+    # Col 1: SERVICE REPORT
+    c_srv = t_hdr.cell(0, 1)
+    p_srv = c_srv.paragraphs[0]
+    p_srv.paragraph_format.space_before = Pt(0)
+    p_srv.paragraph_format.space_after = Pt(2)
+    p_srv.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_srv = p_srv.add_run("SERVICE REPORT")
+    r_srv.font.name = "Cambria"
+    r_srv.font.size = Pt(18)
+    r_srv.bold = True
+    r_srv.underline = True
+
+    # Col 2: NO :
+    c_no = t_hdr.cell(0, 2)
+    p_no = c_no.paragraphs[0]
+    p_no.paragraph_format.space_before = Pt(10)
+    p_no.paragraph_format.space_after = Pt(2)
+    p_no.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    r_no = p_no.add_run("NO :        ")
+    r_no.font.name = "Calibri"
+    r_no.font.size = Pt(9)
+
+    # Col 4: STEMPEL
+    c_stm = t_hdr.cell(0, 4)
+    p_stm = c_stm.paragraphs[0]
+    p_stm.paragraph_format.space_before = Pt(0)
+    p_stm.paragraph_format.space_after = Pt(2)
+    p_stm.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r_stm = p_stm.add_run("STEMPEL")
+    r_stm.font.name = "Calibri"
+    r_stm.font.size = Pt(18)
+    r_stm.bold = True
+    r_stm.underline = True
+
+    # Main 3-column table:
+    # Col 0 = 204 pt (4080 dxa), Col 1 = 100 pt (2000 dxa), Col 2 = 106 pt (2120 dxa)
+    # Total = 410 pt (8200 dxa = 5.69 in)
+    tbl = doc.add_table(rows=8, cols=3)
+    tbl.alignment = WD_TABLE_ALIGNMENT.LEFT
+    tbl.autofit = False
+
+    # Set table width & grid explicitly in OpenXML
+    tblPr = tbl._tbl.tblPr
+    tblW = tblPr.xpath('./w:tblW')
+    if tblW:
+        tblW[0].set(qn('w:w'), "8200")
+        tblW[0].set(qn('w:type'), "dxa")
+    else:
+        tblPr.append(parse_xml(f'<w:tblW {nsdecls("w")} w:w="8200" w:type="dxa"/>'))
+
+    grid = tbl._tbl.tblGrid
+    for child in list(grid):
+        grid.remove(child)
+    grid.append(parse_xml(f'<w:gridCol {nsdecls("w")} w:w="4080"/>'))
+    grid.append(parse_xml(f'<w:gridCol {nsdecls("w")} w:w="2000"/>'))
+    grid.append(parse_xml(f'<w:gridCol {nsdecls("w")} w:w="2120"/>'))
+
+    w0, w1, w2 = Pt(204), Pt(100), Pt(106)
+    for r in tbl.rows:
+        trPr = r._tr.get_or_add_trPr()
+        trPr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+        r.cells[0].width = w0
+        r.cells[1].width = w1
+        r.cells[2].width = w2
+
+    # --- ROW 0: Headers ---
+    c0 = tbl.cell(0, 0)
+    c1 = tbl.cell(0, 1)
+    c1.merge(tbl.cell(0, 2))
+    for c in [c0, c1]:
+        set_cell_shd(c, "C6D9F1")
+        set_c_borders(c, 'single', 'single', 'single', 'single', sz='4')
+        set_c_margins(c, top=15, bottom=15, left=30, right=30)
+    add_p(c0, "DATA USER", bold=True, size_pt=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+    add_p(c1, "DATA UNIT / BARANG", bold=True, size_pt=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+
+    # --- ROW 1: Field list ---
+    c10 = tbl.cell(1, 0)
+    c11 = tbl.cell(1, 1)
+    c11.merge(tbl.cell(1, 2))
+    for c in [c10, c11]:
+        set_c_borders(c, 'single', 'single', 'single', 'single', sz='4')
+        set_c_margins(c, top=15, bottom=15, left=30, right=30)
+    add_p(c10, "Nama    :", size_pt=8.5, space_after_pt=1)
+    add_p(c10, "Alamat  :", size_pt=8.5, space_after_pt=1)
+    add_p(c10, "", size_pt=8.5, space_after_pt=1)
+    add_p(c10, "Ruang   :", size_pt=8.5, space_after_pt=1)
+
+    add_p(c11, "Jenis Barang   :", size_pt=8.5, space_after_pt=1)
+    add_p(c11, "Merk                :", size_pt=8.5, space_after_pt=1)
+    add_p(c11, "Type / Model :", size_pt=8.5, space_after_pt=1)
+    add_p(c11, "S/N                   :", size_pt=8.5, space_after_pt=1)
+
+    # --- ROW 2: LAPORAN USER (All 3 merged) ---
+    c20 = tbl.cell(2, 0)
+    c20.merge(tbl.cell(2, 1))
+    c20.merge(tbl.cell(2, 2))
+    set_c_borders(c20, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c20, top=15, bottom=15, left=30, right=30)
+    add_p(c20, "LAPORAN USER :", bold=True, size_pt=8.5, space_after_pt=18)
+
+    # --- ROW 3: ANALISA & TEMUAN TEKNIS (All 3 merged) ---
+    c30 = tbl.cell(3, 0)
+    c30.merge(tbl.cell(3, 1))
+    c30.merge(tbl.cell(3, 2))
+    set_c_borders(c30, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c30, top=15, bottom=15, left=30, right=30)
+    add_p(c30, "ANALISA & TEMUAN TEKNIS :", bold=True, size_pt=8.5, space_after_pt=1)
+    add_p(c30, "☐ Unit Bersih              ☐ Terdapat Troubleshooting Pada Bagian …", size_pt=8.5, space_after_pt=1)
+    add_p(c30, "☐ Unit Kotor               ☐", size_pt=8.5, space_after_pt=1)
+
+    # --- ROW 4: TINDAKAN (All 3 merged, clean 2-column internal table without vertical divider) ---
+    c40 = tbl.cell(4, 0)
+    c40.merge(tbl.cell(4, 1))
+    c40.merge(tbl.cell(4, 2))
+    set_c_borders(c40, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c40, top=15, bottom=15, left=30, right=30)
+
+    t_tin = c40.add_table(rows=1, cols=2)
+    t_tin.alignment = WD_TABLE_ALIGNMENT.LEFT
+    for c in t_tin.rows[0].cells:
+        set_c_borders(c, 'none', 'none', 'none', 'none')
+        set_c_margins(c, 0, 0, 0, 0)
+    t_tin.columns[0].width = Pt(190)
+    t_tin.columns[1].width = Pt(210)
+
+    c_tl = t_tin.cell(0, 0)
+    add_p(c_tl, "TINDAKAN :", bold=True, size_pt=8.5, space_after_pt=1)
+    add_p(c_tl, "☐ Servis Rutin        ☐ instalasi/ Pemasangan", size_pt=8.5, space_after_pt=1)
+    add_p(c_tl, "☐ Perbaikan          ☐ Pembongkaran/ Pelepasan", size_pt=8.5, space_after_pt=1)
+    add_p(c_tl, "☐ Overhaul           ☐ Bongkar – Pasang Unit", size_pt=8.5, space_after_pt=1)
+    add_p(c_tl, "☐", size_pt=8.5, space_after_pt=1)
+
+    c_tr = t_tin.cell(0, 1)
+    add_p(c_tr, "Spesifikasi Tindakan :", underline=True, size_pt=8.5, space_after_pt=2)
+    dots = "......................................................................................................"
+    for _ in range(4):
+        add_p(c_tr, dots, size_pt=7, space_after_pt=1)
+
+    # --- ROW 5: Middle block ---
+    # Left: Col 0 + Col 1 (304 pt = 4.22 in) -> DATA UKUR + KESIMPULAN + PENGGUNAAN MATERIAL
+    # Right: Col 2 (106 pt = 1.47 in) -> Signatures
+    c5_left = tbl.cell(5, 0)
+    c5_left.merge(tbl.cell(5, 1))
+    c5_left.width = Pt(304)
+    c5_right = tbl.cell(5, 2)
+    c5_right.width = Pt(106)
+
+    set_c_borders(c5_left, 'single', 'single', 'single', 'single', sz='4')
+    set_c_borders(c5_right, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c5_left, top=0, bottom=0, left=0, right=0)
+    set_c_margins(c5_right, top=0, bottom=0, left=0, right=0)
+
+    # 1. DATA UKUR + KESIMPUAN
+    t_uk = c5_left.add_table(rows=8, cols=3)
+    t_uk.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t_uk.autofit = False
+    
+    # Remove the empty paragraph before t_uk
+    p_orig = c5_left.paragraphs[0]
+    p_orig._element.getparent().remove(p_orig._element)
+
+    w_uk = [Pt(22), Pt(46), Pt(236)]
+    for r in t_uk.rows:
+        trPr = r._tr.get_or_add_trPr()
+        trPr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+        for idx, w in enumerate(w_uk):
+            r.cells[idx].width = w
+
+    for col_idx in range(3):
+        c = t_uk.cell(0, col_idx)
+        set_cell_shd(c, "C6D9F1")
+        set_c_borders(c, 'single', 'single', 'single', 'single', sz='4')
+        set_c_margins(c, top=8, bottom=8, left=15, right=15)
+    c_du_h = t_uk.cell(0, 0)
+    c_du_h.merge(t_uk.cell(0, 1))
+    c_du_h.width = Pt(68)
+    add_p(c_du_h, "DATA UKUR", bold=True, size_pt=8, align=WD_ALIGN_PARAGRAPH.CENTER)
+    add_p(t_uk.cell(0, 2), "KESIMPUAN", bold=True, size_pt=8, align=WD_ALIGN_PARAGRAPH.CENTER)
+
+    meas = [("V", "Volt"), ("I", "Amp"), ("R", "\u03a9"), ("Lp", "Psi"), ("Hp", "Psi"), ("\u0394", "\u02daC"), ("RH", "%")]
+    for idx, (sym, unit) in enumerate(meas, start=1):
+        c_lbl = t_uk.cell(idx, 0)
+        c_un = t_uk.cell(idx, 1)
+        for c in [c_lbl, c_un]:
+            set_c_borders(c, 'single', 'single', 'single', 'single', sz='4')
+            set_c_margins(c, top=1, bottom=1, left=2, right=2)
+        p0 = add_p(c_lbl, sym, size_pt=7.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+        p0.paragraph_format.line_spacing = Pt(9)
+        p1 = add_p(c_un, unit, size_pt=7.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+        p1.paragraph_format.line_spacing = Pt(9)
+
+    c_kes = t_uk.cell(1, 2)
+    for r_idx in range(2, 8):
+        c_kes.merge(t_uk.cell(r_idx, 2))
+    c_kes.width = Pt(236)
+    set_c_borders(c_kes, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c_kes, top=4, bottom=4, left=15, right=15)
+    
+    p_k0 = add_p(c_kes, "Setelah dilakukan tindakan penanganan :", size_pt=7.5, space_after_pt=1)
+    p_k0.paragraph_format.line_spacing = Pt(9.5)
+    p_k1 = add_p(c_kes, "☐ Unit beroperasi normal sesuai standar teknis", size_pt=7.5, space_after_pt=1)
+    p_k1.paragraph_format.line_spacing = Pt(9.5)
+    p_k2 = add_p(c_kes, "☐ Unit beroperasi namun tidak normal", size_pt=7.5, space_after_pt=1)
+    p_k2.paragraph_format.line_spacing = Pt(9.5)
+    p_k3 = add_p(c_kes, "☐ Penanganan dihentikan", size_pt=7.5, space_after_pt=1)
+    p_k3.paragraph_format.line_spacing = Pt(9.5)
+    p_k4 = add_p(c_kes, "Faktor Penyebab       :", size_pt=7.5, space_after_pt=1)
+    p_k4.paragraph_format.line_spacing = Pt(9.5)
+    p_k5 = add_p(c_kes, "Solusi/ Saran Teknis  :", size_pt=7.5, space_after_pt=1)
+    p_k5.paragraph_format.line_spacing = Pt(9.5)
+
+    # 2. PENGGUNAAN MATERIAL / SUKU CADANG
+    t_mat = c5_left.add_table(rows=7, cols=4)
+    t_mat.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t_mat.autofit = False
+    w_mat = [Pt(118), Pt(34), Pt(118), Pt(34)]
+    for r in t_mat.rows:
+        trPr = r._tr.get_or_add_trPr()
+        trPr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+        for idx, w in enumerate(w_mat):
+            r.cells[idx].width = w
+
+    c_mh = t_mat.cell(0, 0)
+    for col_idx in range(1, 4):
+        c_mh.merge(t_mat.cell(0, col_idx))
+    c_mh.width = Pt(304)
+    set_cell_shd(c_mh, "C6D9F1")
+    set_c_borders(c_mh, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c_mh, top=8, bottom=8, left=15, right=15)
+    add_p(c_mh, "PENGGUNAAN  MATERIAL / SUKU CADANG", bold=True, size_pt=8, align=WD_ALIGN_PARAGRAPH.CENTER)
+
+    headers = ["Nama Barang", "Qty", "Nama Barang", "Qty"]
+    for col_idx, h in enumerate(headers):
+        c = t_mat.cell(1, col_idx)
+        set_c_borders(c, 'single', 'single', 'single', 'single', sz='4')
+        set_c_margins(c, top=4, bottom=4, left=4, right=4)
+        add_p(c, h, size_pt=7.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+
+    for r_idx in range(2, 7):
+        for col_idx in range(4):
+            c = t_mat.cell(r_idx, col_idx)
+            set_c_borders(c, 'single', 'single', 'single', 'single', sz='4')
+            set_c_margins(c, top=2, bottom=2, left=4, right=4)
+            p = c.paragraphs[0]
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(0)
+            p.paragraph_format.line_spacing = Pt(8.5)
+
+    # Right side of Row 5: Signatures
+    p_orig_r = c5_right.paragraphs[0]
+    p_orig_r._element.getparent().remove(p_orig_r._element)
+
+    t_sig = c5_right.add_table(rows=2, cols=1)
+    t_sig.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t_sig.autofit = False
+    for r in t_sig.rows:
+        trPr = r._tr.get_or_add_trPr()
+        trPr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+        r.cells[0].width = Pt(106)
+
+    cs0 = t_sig.cell(0, 0)
+    set_c_borders(cs0, top='none', bottom='single', left='none', right='none', sz='4')
+    set_c_margins(cs0, top=8, bottom=6, left=8, right=8)
+    add_p(cs0, "Mengetahui", size_pt=8, align=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=0)
+    add_p(cs0, "User", size_pt=8, align=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=28)
+    add_p(cs0, "…………………………………..", size_pt=7, align=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=0)
+
+    cs1 = t_sig.cell(1, 0)
+    set_c_borders(cs1, top='single', bottom='none', left='none', right='none', sz='4')
+    set_c_margins(cs1, top=8, bottom=6, left=8, right=8)
+    add_p(cs1, "Teknisi/ Pelaksana", size_pt=8, align=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=28)
+    add_p(cs1, "…………………………", size_pt=7, align=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=0)
+
+    # --- ROW 6: HASIL PENANGANAN (All 3 merged) ---
+    c60 = tbl.cell(6, 0)
+    c60.merge(tbl.cell(6, 1))
+    c60.merge(tbl.cell(6, 2))
+    c60.width = Pt(410)
+    set_c_borders(c60, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c60, top=10, bottom=10, left=30, right=30)
+    p_hp = c60.paragraphs[0]
+    p_hp.paragraph_format.space_before = Pt(0)
+    p_hp.paragraph_format.space_after = Pt(0)
+    r_hp = p_hp.add_run("HASIL PENANGANAN    ")
+    r_hp.bold = True
+    r_hp.font.name = "Calibri"
+    r_hp.font.size = Pt(8.5)
+    r_hp2 = p_hp.add_run("  ☐ SELESAI          ☐ BERLANJUT          ☐ DIHENTIKAN")
+    r_hp2.font.name = "Calibri"
+    r_hp2.font.size = Pt(8.5)
+
+    # --- ROW 7: Catatan (left, Col 0+1) & INVOICE (right, Col 2) ---
+    c7_left = tbl.cell(7, 0)
+    c7_left.merge(tbl.cell(7, 1))
+    c7_left.width = Pt(304)
+    c7_right = tbl.cell(7, 2)
+    c7_right.width = Pt(106)
+
+    set_c_borders(c7_left, 'single', 'single', 'single', 'single', sz='4')
+    set_c_borders(c7_right, 'single', 'single', 'single', 'single', sz='4')
+    set_c_margins(c7_left, top=10, bottom=10, left=30, right=30)
+    set_c_margins(c7_right, top=0, bottom=0, left=0, right=0)
+
+    add_p(c7_left, "Catatan :", size_pt=8.5, space_after_pt=26)
+
+    p_orig_inv = c7_right.paragraphs[0]
+    p_orig_inv._element.getparent().remove(p_orig_inv._element)
+
+    t_inv = c7_right.add_table(rows=2, cols=1)
+    t_inv.alignment = WD_TABLE_ALIGNMENT.LEFT
+    t_inv.autofit = False
+    for r in t_inv.rows:
+        trPr = r._tr.get_or_add_trPr()
+        trPr.append(parse_xml(f'<w:cantSplit {nsdecls("w")}/>'))
+        r.cells[0].width = Pt(106)
+
+    ci_h = t_inv.cell(0, 0)
+    set_c_borders(ci_h, top='none', bottom='single', left='none', right='none', sz='4')
+    set_c_margins(ci_h, top=6, bottom=6, left=8, right=8)
+    add_p(ci_h, "INVOICE", bold=True, underline=True, size_pt=8.5, align=WD_ALIGN_PARAGRAPH.CENTER)
+
+    ci_b = t_inv.cell(1, 0)
+    set_c_borders(ci_b, top='none', bottom='none', left='none', right='none')
+    set_c_margins(ci_b, top=6, bottom=6, left=12, right=12)
+    add_p(ci_b, "Rp.", size_pt=8.5, space_after_pt=8)
+    add_p(ci_b, "☐ LUNAS", size_pt=8.5, align=WD_ALIGN_PARAGRAPH.CENTER, space_after_pt=2)
+
+
 def enhance_docx_output(inp, out):
     """
     High-fidelity post-processing to ensure converted DOCX matches PDF exactly:
@@ -266,6 +702,14 @@ def enhance_docx_output(inp, out):
     try:
         pdf = fitz.open(inp)
         doc = Document(out)
+
+        # Check if document is SERVICE REPORT / BLANGKO form
+        pdf_text = " ".join(p.get_text() for p in pdf)
+        if "SERVICE REPORT" in pdf_text and ("DATA USER" in pdf_text or "DATA UNIT" in pdf_text or "BLANGKO" in inp.upper()):
+            reconstruct_service_report_form(doc)
+            doc.save(out)
+            pdf.close()
+            return
 
         # 1. Run-level transformations across entire document
         for r in doc._element.xpath('.//w:r'):
@@ -599,6 +1043,116 @@ def enhance_docx_output(inp, out):
                                 bottom.set(qn('w:sz'), border_sz)
                                 bottom.set(qn('w:color'), '000000')
                                 break
+
+        # Step 13: Align Section Geometry and Orientation with PDF (Fix landscape clipping)
+        try:
+            from docx.enum.section import WD_ORIENT
+            for s_idx, section in enumerate(doc.sections):
+                p_idx = min(s_idx, len(pdf) - 1)
+                pdf_page = pdf[p_idx]
+                pw = pdf_page.rect.width
+                ph = pdf_page.rect.height
+                if pw > ph:
+                    section.orientation = WD_ORIENT.LANDSCAPE
+                    sectPr = section._sectPr
+                    pgSz = sectPr.find(qn('w:pgSz'))
+                    if pgSz is not None:
+                        pgSz.set(qn('w:orient'), 'landscape')
+        except Exception:
+            pass
+
+        # Step 14: Prevent Table Row Content Clipping & Page Splitting
+        for t in doc.tables:
+            for r in t.rows:
+                trPr = r._tr.get_or_add_trPr()
+                trHeight = trPr.find(qn('w:trHeight'))
+                # Change exact height to atLeast so images and multiline text are not cut off
+                if trHeight is not None and trHeight.get(qn('w:hRule')) == 'exact':
+                    trHeight.set(qn('w:hRule'), 'atLeast')
+                # Keep table row together on page break
+                if trPr.find(qn('w:cantSplit')) is None:
+                    trPr.append(OxmlElement('w:cantSplit'))
+
+        # Step 15: Table Cell Padding Optimization for Dense Tables (>= 4 columns)
+        # Prevents numbers and currency from wrapping onto multiple lines
+        for t in doc.tables:
+            if len(t.columns) >= 4:
+                tblPr = t._tbl.find(qn('w:tblPr'))
+                if tblPr is not None:
+                    tblCellMar = tblPr.find(qn('w:tblCellMar'))
+                    if tblCellMar is None:
+                        tblCellMar = OxmlElement('w:tblCellMar')
+                        tblPr.append(tblCellMar)
+                    for side, default_val in [('top', '30'), ('bottom', '30'), ('left', '40'), ('right', '40')]:
+                        m = tblCellMar.find(qn(f'w:{side}'))
+                        if m is None:
+                            m = OxmlElement(f'w:{side}')
+                            tblCellMar.append(m)
+                            m.set(qn('w:w'), default_val)
+                            m.set(qn('w:type'), 'dxa')
+                        else:
+                            try:
+                                if int(m.get(qn('w:w'), '0')) > 80:
+                                    m.set(qn('w:w'), default_val)
+                            except ValueError:
+                                pass
+
+        # Step 16: Font Name Normalization (PostScript names to standard system fonts)
+        font_replacements = {
+            'ArialMT': 'Arial', 'Arial-BoldMT': 'Arial', 'Arial-ItalicMT': 'Arial',
+            'TimesNewRomanPSMT': 'Times New Roman', 'TimesNewRomanPS-BoldMT': 'Times New Roman',
+            'TimesNewRomanPS-ItalicMT': 'Times New Roman',
+            'Calibri-Bold': 'Calibri', 'Calibri-Italic': 'Calibri',
+            'CourierNewPSMT': 'Courier New',
+            'Helvetica': 'Arial', 'Helvetica-Bold': 'Arial',
+        }
+        for r in doc._element.xpath('.//w:r'):
+            rPr = r.find(qn('w:rPr'))
+            if rPr is None:
+                continue
+            rFonts = rPr.find(qn('w:rFonts'))
+            if rFonts is not None:
+                for attr in [qn('w:ascii'), qn('w:hAnsi'), qn('w:cs')]:
+                    f_name = rFonts.get(attr)
+                    if f_name:
+                        if '+' in f_name:
+                            f_name = f_name.split('+', 1)[1]
+                        clean_name = font_replacements.get(f_name)
+                        if clean_name:
+                            rFonts.set(attr, clean_name)
+                            if 'Bold' in f_name and rPr.find(qn('w:b')) is None:
+                                rPr.append(OxmlElement('w:b'))
+                            if 'Italic' in f_name and rPr.find(qn('w:i')) is None:
+                                rPr.append(OxmlElement('w:i'))
+
+        # Step 17: Drawing/Image Positioning Safety
+        for p in doc.paragraphs:
+            if p._p.xpath('.//w:drawing'):
+                pPr = p._p.get_or_add_pPr()
+                ind = pPr.find(qn('w:ind'))
+                if ind is not None:
+                    try:
+                        if int(ind.get(qn('w:left'), '0')) > 720:
+                            ind.set(qn('w:left'), '0')
+                    except ValueError:
+                        pass
+                sp = pPr.find(qn('w:spacing'))
+                if sp is not None and sp.get(qn('w:lineRule')) == 'exact':
+                    sp.set(qn('w:lineRule'), 'auto')
+
+        # Step 18: Key-Value Colons Tab Alignment for Official Letters & Forms
+        for p in doc.paragraphs:
+            txt = p.text
+            if '\t:' in txt or '  :' in txt:
+                pPr = p._p.get_or_add_pPr()
+                if not pPr.xpath('./w:tabs'):
+                    tabs_el = OxmlElement('w:tabs')
+                    for pos in [1800, 2400, 3600]:
+                        tab_el = OxmlElement('w:tab')
+                        tab_el.set(qn('w:val'), 'left')
+                        tab_el.set(qn('w:pos'), str(pos))
+                        tabs_el.append(tab_el)
+                    pPr.append(tabs_el)
 
         doc.save(out)
         pdf.close()
