@@ -7,7 +7,6 @@ dist-ssr/
 src-tauri/target/
 src-tauri/gen
 build/
-src-tauri/resources/*.exe
 __pycache__/
 *.pyc
 

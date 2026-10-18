@@ -21,7 +21,6 @@ export default function Home() {
     { path: "/maker/image", icon: "🖼", title: t("nav.imageToPdf"), desc: t("home.desc.image"), color: "#f43f5e" },
     { path: "/maker/merge", icon: "📑", title: t("nav.mergePdf"), desc: t("home.desc.merge"), color: "#6366f1" },
     { path: "/maker/split", icon: "✂", title: t("nav.splitPdf"), desc: t("home.desc.split"), color: "#22c55e" },
-    { path: "/converter/pdf-to-word", icon: "📝", title: t("nav.pdfToWord"), desc: t("home.desc.word"), color: "#3b82f6" },
     { path: "/viewer", icon: "🔍", title: t("nav.viewer"), desc: t("home.desc.viewer"), color: "#f59e0b" },
   ];
 

@@ -7,7 +7,6 @@ import ImageToPdf from "./pages/ImageToPdf";
 import MergePdf from "./pages/MergePdf";
 import SplitPdf from "./pages/SplitPdf";
 import Viewer from "./pages/Viewer";
-import PdfToDocx from "./pages/PdfToDocx";
 import Settings from "./pages/Settings";
 import "./App.css";
 
@@ -22,7 +21,6 @@ function App() {
           <Route path="maker/image" element={<ImageToPdf />} />
           <Route path="maker/merge" element={<MergePdf />} />
           <Route path="maker/split" element={<SplitPdf />} />
-          <Route path="converter/pdf-to-word" element={<PdfToDocx />} />
           <Route path="viewer" element={<Viewer />} />
           <Route path="settings" element={<Settings />} />
         </Route>

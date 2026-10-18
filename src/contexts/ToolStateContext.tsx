@@ -33,10 +33,6 @@ interface ToolStateContextType {
   splitPdfSelectedPages: number[];
   setSplitPdfSelectedPages: React.Dispatch<React.SetStateAction<number[]>>;
   
-  // PdfToDocx
-  pdfToDocxFile: PdfItem | null;
-  setPdfToDocxFile: React.Dispatch<React.SetStateAction<PdfItem | null>>;
-  
   // Viewer
   viewerFilePath: string;
   setViewerFilePath: React.Dispatch<React.SetStateAction<string>>;
@@ -54,8 +50,6 @@ export function ToolStateProvider({ children }: { children: ReactNode }) {
   const [splitPdfThumbs, setSplitPdfThumbs] = useState<{ num: number; dataUrl: string }[]>([]);
   const [splitPdfSelectedPages, setSplitPdfSelectedPages] = useState<number[]>([]);
   
-  const [pdfToDocxFile, setPdfToDocxFile] = useState<PdfItem | null>(null);
-  
   const [viewerFilePath, setViewerFilePath] = useState("");
 
   return (
@@ -68,7 +62,6 @@ export function ToolStateProvider({ children }: { children: ReactNode }) {
         splitPdfPageCount, setSplitPdfPageCount,
         splitPdfThumbs, setSplitPdfThumbs,
         splitPdfSelectedPages, setSplitPdfSelectedPages,
-        pdfToDocxFile, setPdfToDocxFile,
         viewerFilePath, setViewerFilePath,
       }}
     >
