@@ -1,90 +1,69 @@
 # 📄 PDF Utils
 
-**PDF Utils** adalah aplikasi desktop ringan, cepat, dan modern yang dirancang untuk mempermudah berbagai keperluan pengolahan dokumen PDF Anda. Dibangun menggunakan teknologi **Tauri (Rust)** untuk backend yang super cepat dan hemat memori, serta **React (TypeScript)** untuk antarmuka pengguna yang interaktif dan dinamis.
+Aplikasi desktop modern, ringan, dan cepat untuk pengolahan dokumen PDF berbasis **Tauri v2 (Rust)** dan **React 19 (TypeScript)**.
 
-![PDF Utils Preview](docs/preview.png) 
+Tersedia dalam bentuk **Single Portable Executable** dan installer resmi Windows — **Zero Configuration** (tanpa perlu menginstal Python atau dependensi tambahan).
+
+![PDF Utils Preview](docs/preview.png)
+
+---
 
 ## ✨ Fitur Utama
 
-- 🖼️ **Image to PDF**: Konversi dan gabungkan beberapa gambar (PNG, JPG, WEBP, BMP) menjadi satu dokumen PDF dengan pengaturan ukuran otomatis (kertas A4).
-- 🔗 **Merge PDF**: Gabungkan banyak file PDF secara berurutan menjadi satu file PDF utuh dengan mudah.
-- ✂️ **Split PDF**: Ekstrak halaman-halaman tertentu dari sebuah dokumen PDF besar secara visual (thumbnail) dan simpan sebagai dokumen baru.
-- 📝 **PDF to Word (.docx)**: Konversi dokumen PDF Anda menjadi format dokumen Microsoft Word yang dapat diedit secara penuh menggunakan algoritma ekstraksi tabel dan paragraf tingkat tinggi.
-- 👁️ **PDF Viewer**: Penampil dokumen PDF bawaan (*built-in*) lengkap dengan fitur navigasi dan pencarian teks.
-- 🌐 **Dukungan Multi-bahasa (i18n)**: Antarmuka yang tersedia dalam Bahasa Indonesia dan English.
-- 🎨 **Tema Kustom (Accent Colors)**: Sesuaikan warna aplikasi sesuai selera Anda.
-- ⚡ **Open Explorer After Export**: Otomatis membuka dan menyorot (*highlight*) file hasil konversi setelah proses berhasil.
+- 🖼️ **Image to PDF**: Konversi dan gabungkan gambar (PNG, JPG, WEBP, BMP) ke ukuran standar A4 secara otomatis.
+- 🔗 **Merge PDF**: Gabungkan beberapa dokumen PDF menjadi satu file berurutan dengan mudah.
+- ✂️ **Split PDF**: Pratinjau visual thumbnail dan ekstrak halaman tertentu ke dokumen baru.
+- 📝 **PDF to Word (.docx)**: Konversi PDF ke dokumen Word yang dapat diedit dengan rekonstruksi tabel, tata letak, dan gaya teks presisi.
+- 👁️ **PDF Viewer**: Penampil dokumen PDF bawaan dengan navigasi halaman dan pencarian teks.
+- 🌐 **Multi-bahasa & Tema**: Antarmuka Bahasa Indonesia & English dengan pilihan warna aksen kustom.
 
 ---
 
-## 🛠️ Requirements (Persyaratan Sistem)
+## 🚀 Memulai Cepat (Development)
 
-Untuk menjalankan atau melakukan kompilasi (*build*) aplikasi ini dari kode sumber (*source code*), sistem Anda harus memenuhi beberapa persyaratan berikut:
+### Prasyarat
+- **Node.js** (v18+) & **Rust** (v1.75+)
+- **Python 3.12+** *(hanya diperlukan jika ingin memodifikasi kode engine Word di `engine/`)*
 
-### Persyaratan untuk Pengguna (User - Production)
-- Sistem Operasi: Windows 10/11, macOS, atau Linux.
-- **Zero-Configuration**: Aplikasi siap pakai langsung (*out-of-the-box*). Seluruh modul pemroses telah dibundel ke dalam aplikasi (termasuk engine PDF to Word), sehingga pengguna **tidak memerlukan instalasi Python atau konfigurasi manual apa pun**.
-
-### Persyaratan untuk Developer (Development)
-- **Node.js** (v18 atau lebih baru) dan npm/yarn/pnpm.
-- **Rust & Cargo** (v1.75 atau lebih baru): [Cara instalasi Rust](https://www.rust-lang.org/tools/install).
-- **Python 3.x** & PyInstaller (opsional untuk developer yang ingin merakit standalone engine dengan menjalankan `scripts/build-engine.bat`).
-- (Khusus Windows) **Visual Studio C++ Build Tools** beserta komponen *Desktop development with C++*.
-- (Khusus macOS) **Xcode Command Line Tools** (`xcode-select --install`).
-- (Khusus Linux) **Dependensi sistem**: `libwebkit2gtk-4.0-dev`, `build-essential`, `curl`, `wget`, `file`, `libssl-dev`, `libgtk-3-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`.
-
----
-
-## 🚀 Cara Menjalankan (Development)
-
-1. **Kloning Repositori**
-   ```bash
-   git clone https://github.com/Eszuri/pdf-utils.git
-   cd pdf-utils
-   ```
-
-2. **Instalasi Dependensi Frontend**
-   ```bash
-   npm install
-   ```
-
-3. **Jalankan Aplikasi dalam Mode Dev**
-   ```bash
-   npm run tauri dev
-   ```
-
-## 📦 Cara Mem-build (Production - Khusus Windows)
-
-Untuk merakit aplikasi menjadi file *Installer* (`.msi` dan `.exe`) yang siap didistribusikan khusus di sistem Windows, ikuti langkah berikut:
-
-### Persiapan Build Windows
-1. Pastikan Anda telah menginstal **Visual Studio C++ Build Tools** (wajib untuk mengkompilasi *engine* Rust di Windows).
-2. Jika Anda belum memiliki *Wix Toolset* (yang dibutuhkan Tauri untuk membuat file `.msi`), jalankan aplikasi Tauri sekali saja, dan Tauri akan mengunduhnya secara otomatis, ATAU Anda dapat mengunduhnya secara manual dari [wixtoolset.org](https://wixtoolset.org/).
-
-### Eksekusi Build
-Buka terminal (CMD / PowerShell) di dalam folder proyek, lalu jalankan:
-
+### Menjalankan Aplikasi
 ```bash
-npm run tauri build
+# 1. Kloning repositori
+git clone https://github.com/Eszuri/pdf-utils.git
+cd pdf-utils
+
+# 2. Instalasi dependensi
+npm install
+
+# 3. Jalankan mode pengembangan
+npm run tauri dev
 ```
 
-Tunggu beberapa menit hingga proses kompilasi Rust dan pemaketan selesai. 
-Hasil rakitan (*installer* Windows) akan tersedia di direktori:
-👉 `src-tauri/target/release/bundle/msi/pdf-utils_1.0.0_x64_en-US.msi`
+---
 
-Aplikasi ini telah dioptimasi dengan pengaturan ukuran (code splitting pada Vite) dan optimasi biner Cargo (LTO, opt-level "s", strip) sehingga menghasilkan ukuran aplikasi *installer* Windows yang sangat ringan.
+## 📦 Build & Rilis (Production)
+
+| Perintah | Fungsi |
+| :--- | :--- |
+| `npm run tauri build` | Merakit installer (`.msi`) dan standalone `.exe` utama menggunakan engine yang sudah ada. |
+| `npm run engine:build` | Merakit ulang biner Python engine (`pdf-word-engine.exe`) dari folder `engine/`. |
+| `npm run build:all` | Merakit engine Python terlebih dahulu, lalu mem-build aplikasi Tauri secara penuh. |
+
+Hasil build biner Windows akan berada di:
+- **Portable Single `.exe`**: `src-tauri/target/release/pdf-utils.exe`
+- **Installer MSI**: `src-tauri/target/release/bundle/msi/`
+
+> **CI/CD Auto-Release**: Repositori ini telah dilengkapi GitHub Actions. Setiap kali git tag dipush (contoh: `git tag v1.0.0 && git push origin --tags`), GitHub akan otomatis mem-build dan merilis installer `.msi` serta file portable `.exe`.
 
 ---
 
-## 📚 Teknologi yang Digunakan
+## 🛠️ Tech Stack
 
-- **Frontend**: [React 19](https://react.dev/), [Vite](https://vitejs.dev/), [TypeScript](https://www.typescriptlang.org/), [Framer Motion](https://www.framer.com/motion/), [PDF.js](https://mozilla.github.io/pdf.js/)
-- **Backend**: [Tauri v2](https://tauri.app/), [Rust](https://www.rust-lang.org/)
-- **Pemroses PDF (Rust)**: `printpdf` (membuat PDF dari gambar), `lopdf` (merakit/memisahkan PDF).
-- **Pemroses Word**: `pdf2docx` (Python).
+- **Frontend**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/), [Framer Motion](https://www.framer.com/motion/), [PDF.js](https://mozilla.github.io/pdf.js/)
+- **Backend Core**: [Tauri v2](https://tauri.app/), [Rust](https://www.rust-lang.org/) (`lopdf`, `printpdf`)
+- **Word Engine**: PyMuPDF, python-docx, PyInstaller (*embedded standalone binary*)
 
 ---
 
 ## 📜 Lisensi
 
-Aplikasi ini dilisensikan di bawah [MIT License](LICENSE). Anda bebas memodifikasi dan mendistribusikan ulang.
+Dilisensikan di bawah [MIT License](LICENSE).
