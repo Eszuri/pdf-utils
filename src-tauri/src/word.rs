@@ -10,6 +10,16 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use tauri::ipc::Channel;
+use tauri::Manager;
+
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const EMBEDDED_ENGINE: Option<&'static [u8]> =
+    Some(include_bytes!("../binaries/pdf-word-engine-x86_64-pc-windows-msvc.exe"));
+
+#[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
+const EMBEDDED_ENGINE: Option<&'static [u8]> = None;
+
+static EXTRACT_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Default)]
 pub struct WordJobs(Mutex<HashMap<String, Arc<AtomicBool>>>);
@@ -32,58 +42,101 @@ fn hidden_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     command
 }
 
-fn engine_command() -> Result<Command, String> {
+fn get_or_extract_engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let _lock = EXTRACT_LOCK.lock().map_err(|e| e.to_string())?;
+
     let name = if cfg!(windows) {
         "pdf-word-engine.exe"
     } else {
         "pdf-word-engine"
     };
-    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-    let bundled = executable
-        .parent()
-        .ok_or("Missing executable directory")?
-        .join(name);
-    if bundled.is_file() {
-        return Ok(hidden_command(bundled));
+
+    // 1. Check if a standalone engine is placed directly next to the executable
+    if let Ok(executable) = std::env::current_exe() {
+        if let Some(parent) = executable.parent() {
+            let bundled = parent.join(name);
+            if bundled.is_file() {
+                return Ok(bundled);
+            }
+        }
     }
+
+    // 2. Self-healing extraction from embedded binary bytes
+    if let Some(bytes) = EMBEDDED_ENGINE {
+        let base_dir = app
+            .path()
+            .app_local_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("bin");
+
+        std::fs::create_dir_all(&base_dir).map_err(|e| e.to_string())?;
+        let target_path = base_dir.join(name);
+
+        let is_valid = match std::fs::metadata(&target_path) {
+            Ok(meta) => meta.len() == bytes.len() as u64,
+            Err(_) => false,
+        };
+
+        if !is_valid {
+            let temp_write_path = base_dir.join(format!("{}.tmp", name));
+            std::fs::write(&temp_write_path, bytes).map_err(|e| e.to_string())?;
+            std::fs::rename(&temp_write_path, &target_path).map_err(|e| e.to_string())?;
+        }
+
+        return Ok(target_path);
+    }
+
+    // 3. Fallback in debug mode
     #[cfg(debug_assertions)]
     {
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let directory = manifest.join("binaries");
-        // Use exactly the current build target's binary, never another architecture.
         let target = env!("PDF_WORD_TARGET");
         let binary = directory.join(format!(
             "pdf-word-engine-{target}{}",
             if cfg!(windows) { ".exe" } else { "" }
         ));
         if binary.is_file() {
-            return Ok(hidden_command(binary));
+            return Ok(binary);
         }
-        let script = manifest.join("../engine/main.py");
-        if script.is_file() {
-            let programs = std::env::var("PDF_UTILS_PYTHON")
-                .map(|p| vec![p])
-                .unwrap_or_else(|_| vec!["python".into(), "python3".into(), "py".into()]);
-            for program in programs {
-                if hidden_command(&program)
-                    .args(["-c", "import pymupdf, docx"])
-                    .output()
-                    .map(|o| o.status.success())
-                    .unwrap_or(false)
-                {
-                    let mut command = hidden_command(program);
-                    command.arg("-u").arg(script);
-                    return Ok(command);
+    }
+
+    Err("ENGINE_MISSING: build the bundled Word engine with npm run engine:build".into())
+}
+
+fn engine_command(app: &tauri::AppHandle) -> Result<Command, String> {
+    #[cfg(debug_assertions)]
+    {
+        if std::env::var("PDF_UTILS_FORCE_PYTHON").is_ok() {
+            let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let script = manifest.join("../engine/main.py");
+            if script.is_file() {
+                let programs = std::env::var("PDF_UTILS_PYTHON")
+                    .map(|p| vec![p])
+                    .unwrap_or_else(|_| vec!["python".into(), "python3".into(), "py".into()]);
+                for program in programs {
+                    if hidden_command(&program)
+                        .args(["-c", "import pymupdf, docx"])
+                        .output()
+                        .map(|o| o.status.success())
+                        .unwrap_or(false)
+                    {
+                        let mut command = hidden_command(program);
+                        command.arg("-u").arg(script);
+                        return Ok(command);
+                    }
                 }
             }
         }
     }
-    Err("ENGINE_MISSING: build the bundled Word engine with npm run engine:build".into())
+
+    let binary_path = get_or_extract_engine(app)?;
+    Ok(hidden_command(binary_path))
 }
 
 #[tauri::command]
-pub async fn word_engine_status() -> Result<Value, String> {
-    tauri::async_runtime::spawn_blocking(|| match engine_command() {
+pub async fn word_engine_status(app: tauri::AppHandle) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || match engine_command(&app) {
         Ok(_) => json!({"ready": true}),
         Err(message) => json!({"ready": false, "message": message}),
     })
@@ -104,6 +157,7 @@ pub fn cancel_word_conversion(
 }
 
 fn run_conversion(
+    app: tauri::AppHandle,
     request: WordRequest,
     progress: Channel<Value>,
     cancel: Arc<AtomicBool>,
@@ -128,7 +182,7 @@ fn run_conversion(
     {
         return Err("INVALID_OUTPUT: select a .docx output file".into());
     }
-    let mut command = engine_command()?;
+    let mut command = engine_command(&app)?;
     let parent = output.parent().ok_or("INVALID_OUTPUT")?;
     let temporary = parent.join(format!(
         ".pdf-utils-{}-{}.docx",
@@ -241,6 +295,7 @@ fn run_conversion(
 
 #[tauri::command]
 pub async fn convert_word(
+    app: tauri::AppHandle,
     request: WordRequest,
     progress: Channel<Value>,
     jobs: tauri::State<'_, WordJobs>,
@@ -261,7 +316,7 @@ pub async fn convert_word(
         map.insert(id.clone(), flag.clone());
     }
     let result =
-        tauri::async_runtime::spawn_blocking(move || run_conversion(request, progress, flag))
+        tauri::async_runtime::spawn_blocking(move || run_conversion(app, request, progress, flag))
             .await
             .map_err(|e| e.to_string())
             .and_then(|r| r);
