@@ -201,6 +201,104 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(merged[0].spans[1].flags,16)
         self.assertEqual(len(lines),5)
 
+    def test_body_numbered_lists_keep_source_tabs_at_every_indent_level(self):
+        doc=pymupdf.open(); page=doc.new_page()
+        for i,x in enumerate([40,76,112]):
+            y=50+i*40
+            page.insert_text((x,y),'1. ',fontsize=10)
+            page.insert_text((x+18,y),f'Indented item {i}',fontsize=10,fontname='hebo')
+            page.insert_text((x+18,y+14),f'Continuation {i}',fontsize=10)
+        doc.save(self.source); doc.close()
+        convert(self.source,self.target)
+        from docx import Document
+        paragraphs={p.text:p for p in Document(self.target).paragraphs if p.text}
+        for i,x in enumerate([40,76,112]):
+            p=paragraphs[f'1. \tIndented item {i}']
+            fmt=p.paragraph_format
+            self.assertAlmostEqual(fmt.left_indent.pt,18,delta=.1)
+            self.assertAlmostEqual(fmt.first_line_indent.pt,-18,delta=.1)
+            self.assertAlmostEqual(fmt.tab_stops[0].position.pt,18,delta=.1)
+            self.assertEqual(p._p.xpath('./w:pPr/w:framePr/@w:x'),[str(x*20)])
+            continuation=paragraphs[f'Continuation {i}']
+            self.assertEqual(continuation._p.xpath('./w:pPr/w:framePr/@w:x'),[str((x+18)*20)])
+
+    def test_body_tabs_preserve_multiple_fields_without_changing_adjacent_styles(self):
+        from pdf_word.write import Writer
+        def span(text,x,right,flags=0):
+            return Span(text,(x,40,right,52),(x,50),'Arial',10,flags,0,0)
+        writer=Writer()
+        line=Line([span('Label ',40,65),span('Bold',65,85,16),
+                   span('Value',120,145),span('End',180,198)],(40,40,198,52))
+        writer.line(line,612)
+        p=writer.doc.paragraphs[0]
+        self.assertEqual(p.text,'Label Bold\tValue\tEnd')
+        self.assertEqual([stop.position.pt for stop in p.paragraph_format.tab_stops],[80,140])
+        self.assertEqual(p.paragraph_format.first_line_indent.pt,0)
+        self.assertTrue(next(r for r in p.runs if r.text=='Bold').bold)
+
+    def test_single_span_list_spacing_preserves_body_and_cell_indents(self):
+        doc=pymupdf.open(); page=doc.new_page()
+        for x in [40,240,440]: page.draw_line((x,80),(x,180))
+        for y in [80,130,180]: page.draw_line((40,y),(440,y))
+        for x,y in [(40,50),(45,110)]:
+            page.insert_text((x,y),'1. Item body',fontsize=10)
+            stream=page.get_contents()[-1]
+            content=doc.xref_stream(stream)
+            doc.update_stream(stream,content.replace(b'[<312e204974656d20626f6479>]TJ',
+                                                     b'[<312e20> -600 <4974656d20626f6479>]TJ'))
+        doc.save(self.source); doc.close()
+        convert(self.source,self.target)
+        from docx import Document
+        output=Document(self.target)
+        body=next(p for p in output.paragraphs if p.text=='1. Item body')
+        cell=output.tables[0].cell(0,0).paragraphs[0]
+        for p,origin in [(body,0),(cell,5)]:
+            self.assertEqual(p.text,'1. Item body')
+            self.assertAlmostEqual(p.paragraph_format.left_indent.pt,origin+17.12,delta=.05)
+            self.assertAlmostEqual(p.paragraph_format.first_line_indent.pt,-17.12,delta=.05)
+            spaces=[r for r in p.runs if r.text==' ']
+            self.assertEqual(spaces[0]._r.xpath('./w:rPr/w:spacing/@w:val'),['120'])
+            self.assertTrue(all(r.font.size.pt==10 for r in p.runs))
+
+    def test_compressed_space_keeps_following_text_position(self):
+        doc=pymupdf.open(); page=doc.new_page()
+        page.insert_text((40,50),'Left Right',fontsize=10)
+        stream=page.get_contents()[-1]
+        content=doc.xref_stream(stream)
+        doc.update_stream(stream,content.replace(b'[<4c656674205269676874>]TJ',
+                                                 b'[<4c65667420> 150 <5269676874>]TJ'))
+        doc.save(self.source); doc.close()
+        convert(self.source,self.target)
+        from docx import Document
+        p=next(p for p in Document(self.target).paragraphs if p.text=='Left Right')
+        space=next(r for r in p.runs if r.text==' ')
+        self.assertEqual(space._r.xpath('./w:rPr/w:spacing/@w:val'),['-30'])
+        self.assertEqual(p.paragraph_format.first_line_indent.pt,0)
+
+    def test_two_digit_list_keeps_small_gap_after_marker(self):
+        doc=pymupdf.open(); page=doc.new_page()
+        page.insert_text((40,50),'10. ',fontsize=10)
+        page.insert_text((59,50),'List content',fontsize=10,fontname='hebo')
+        doc.save(self.source); doc.close()
+        convert(self.source,self.target)
+        from docx import Document
+        p=next(p for p in Document(self.target).paragraphs if 'List content' in p.text)
+        self.assertEqual(p.text,'10. \tList content')
+        self.assertAlmostEqual(p.paragraph_format.tab_stops[0].position.pt,19,delta=.05)
+        self.assertAlmostEqual(p.paragraph_format.left_indent.pt,19,delta=.05)
+
+    def test_backtracking_runs_keep_their_physical_frame_positions(self):
+        from pdf_word.write import Writer
+        # Logical run order can go right-to-left, then return to punctuation.
+        spans=[Span('one',(130,40,150,52),(130,50),'Arial',10,0,0,0),
+               Span('two',(90,40,110,52),(90,50),'Arial',10,0,0,0),
+               Span('.',(152,40,155,52),(152,50),'Arial',10,0,0,0)]
+        writer=Writer()
+        writer.line(Line(spans,(90,40,155,52)),612)
+        self.assertEqual([p.text for p in writer.doc.paragraphs],['one','two','.'])
+        self.assertEqual([p._p.xpath('./w:pPr/w:framePr/@w:x')[0] for p in writer.doc.paragraphs],
+                         ['2600','1800','3040'])
+
     def test_table_vertical_alignment_follows_source_geometry(self):
         doc=pymupdf.open(); page=doc.new_page()
         for x in [40,160,280,400]: page.draw_line((x,80),(x,260))
@@ -389,6 +487,7 @@ class ConversionTests(unittest.TestCase):
                               ('TimesNewRomanPS-BoldMT','Times New Roman'),
                               ('Helvetica-BoldOblique','Arial'),
                               ('Courier-Oblique','Courier New'),
+                              ('CambriaMath','Cambria Math'),
                               ('CustomFont-Bold','CustomFont')]:
             with self.subTest(source=source):
                 self.assertEqual(font_family(source),family)

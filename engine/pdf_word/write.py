@@ -2,6 +2,7 @@
 import io
 import re
 import unicodedata
+from dataclasses import replace
 from statistics import median
 
 from docx import Document
@@ -36,10 +37,32 @@ def font_family(name):
     name = re.sub(r'^[A-Z]{6}\+', '', name)
     name = re.sub(r'[-,](?:BoldItalic|BoldOblique|Bold|Italic|Oblique|Regular|Roman)(?:MT)?$', '', name, flags=re.I)
     return {'Helvetica': 'Arial', 'Times': 'Times New Roman', 'Courier': 'Courier New',
-            'ArialMT': 'Arial', 'TimesNewRomanPSMT': 'Times New Roman',
+            'ArialMT': 'Arial', 'CambriaMath': 'Cambria Math', 'TimesNewRomanPSMT': 'Times New Roman',
             'TimesNewRomanPS': 'Times New Roman', 'SegoeUISymbol': 'Segoe UI Symbol',
             'SegoeUIEmoji': 'Segoe UI Emoji', 'SymbolMT': 'Segoe UI Symbol', 'Symbol': 'Segoe UI Symbol',
             'MalgunGothic': 'Malgun Gothic', 'MicrosoftJhengHeiRegular': 'Microsoft JhengHei'}.get(name, name)
+
+
+def spaced_runs(span):
+    """Retain explicitly expanded/condensed PDF spaces inside a font run."""
+    if not span.glyphs or ''.join(g[0] for g in span.glyphs) != span.text:
+        return [(span, 0)]
+    groups = []
+    for index, glyph in enumerate(span.glyphs):
+        spacing = 0
+        if glyph[0].isspace() and index+1 < len(span.glyphs):
+            following = span.glyphs[index+1]
+            advance = following[2][0]-glyph[2][0]
+            natural = glyph[1][2]-glyph[1][0]
+            difference = advance-natural
+            if advance >= 0 and abs(difference) > max(.2,span.size*.025):
+                spacing = round(difference*20)
+        if groups and groups[-1][1] == spacing:
+            groups[-1][0].append(glyph)
+        else:
+            groups.append(([glyph],spacing))
+    return [(replace(span,text=''.join(g[0] for g in glyphs),glyphs=glyphs),spacing)
+            for glyphs,spacing in groups]
 
 
 def write_spans(paragraph, spans, tab_origin=None):
@@ -50,33 +73,39 @@ def write_spans(paragraph, spans, tab_origin=None):
             position = max(0,gaps[index]-tab_origin)
             paragraph.paragraph_format.tab_stops.add_tab_stop(Pt(position))
             paragraph.add_run('\t')
-        run = paragraph.add_run(clean_text(span.text))
-        run.font.name = font_family(span.font)
-        size = max(1, span.size if span.text.strip() else min(span.size, content_size))
-        # DOCX uses half-points. python-docx truncates fractional half-points,
-        # so a PDF's 9.96 pt would otherwise become 9.5 instead of 10 pt.
-        half_points = int(size*2+.5)
-        run.font.size = Pt(half_points/2)
-        run.bold = bool(span.flags & 16)
-        run.italic = bool(span.flags & 2)
-        run.font.cs_bold = run.bold
-        run.font.cs_italic = run.italic
-        run.underline = bool(span.char_flags & 2)
-        run.font.strike = bool(span.char_flags & 1)
-        run.font.color.rgb = RGBColor.from_string(f'{span.color:06X}')
-        props = run._r.get_or_add_rPr()
-        fonts = props.find(qn('w:rFonts'))
-        for attr in ('eastAsia', 'cs'):
-            fonts.set(qn('w:' + attr), font_family(span.font))
-        props.append(element('szCs', val=half_points))
-        if any(unicodedata.bidirectional(c) in ('R', 'AL') for c in span.text):
-            props.append(element('rtl'))
-        # Preserve baseline offsets, including super/subscript, from geometry.
-        baseline = max(s.origin[1] for s in spans if s.size >= max(x.size for x in spans)*.85)
-        offset = baseline - span.origin[1]
-        if abs(offset) > .7:
-            props.append(element('position', val=round(offset*2)))
+        for part, spacing in spaced_runs(span):
+            write_run(paragraph, part, spans, content_size, spacing)
 
+
+def write_run(paragraph, span, spans, content_size, spacing=0):
+    run = paragraph.add_run(clean_text(span.text))
+    run.font.name = font_family(span.font)
+    size = max(1, span.size if span.text.strip() else min(span.size, content_size))
+    # DOCX uses half-points. python-docx truncates fractional half-points,
+    # so a PDF's 9.96 pt would otherwise become 9.5 instead of 10 pt.
+    half_points = int(size*2+.5)
+    run.font.size = Pt(half_points/2)
+    run.bold = bool(span.flags & 16)
+    run.italic = bool(span.flags & 2)
+    run.font.cs_bold = run.bold
+    run.font.cs_italic = run.italic
+    run.underline = bool(span.char_flags & 2)
+    run.font.strike = bool(span.char_flags & 1)
+    run.font.color.rgb = RGBColor.from_string(f'{span.color:06X}')
+    props = run._r.get_or_add_rPr()
+    if spacing:
+        props.append(element('spacing',val=spacing))
+    fonts = props.find(qn('w:rFonts'))
+    for attr in ('eastAsia', 'cs'):
+        fonts.set(qn('w:' + attr), font_family(span.font))
+    props.append(element('szCs', val=half_points))
+    if any(unicodedata.bidirectional(c) in ('R', 'AL') for c in span.text):
+        props.append(element('rtl'))
+    # Preserve baseline offsets, including super/subscript, from geometry.
+    baseline = max(s.origin[1] for s in spans if s.size >= max(x.size for x in spans)*.85)
+    offset = baseline - span.origin[1]
+    if abs(offset) > .7:
+        props.append(element('position', val=round(offset*2)))
 
 def compact(paragraph, size=1):
     fmt = paragraph.paragraph_format
@@ -86,6 +115,39 @@ def compact(paragraph, size=1):
     fmt.widow_control = False
     fmt.keep_with_next = False
     fmt.keep_together = False
+
+
+def paragraph_indent(paragraph, line, origin):
+    """Use the same source-relative tabs and hanging indents in frames and cells."""
+    fmt = paragraph.paragraph_format
+    left = max(0, line.spans[0].bbox[0]-origin)
+    fmt.left_indent = Pt(left)
+    fmt.right_indent = Pt(0)
+    fmt.first_line_indent = Pt(0)
+    # A list marker and its indent may be inside one PDF span. Detect its
+    # actual content start from glyph positions, not only inter-span gaps.
+    text = ''.join(s.text for s in line.spans)
+    marker = re.match(r'^\s*(?:[-*+\u2022\u25e6\u25aa\u2013\u2014]|\(?\d+(?:\.\d+)*[.)]|[A-Za-z]+[.)])\s+\S',text)
+    glyphs = [g for s in line.spans for g in s.glyphs]
+    if marker and ''.join(g[0] for g in glyphs) == text:
+        offset = marker.end()-1
+        consumed = 0
+        for glyph in glyphs:
+            if consumed == offset:
+                text_left = glyph[1][0]-origin
+                fmt.left_indent = Pt(text_left)
+                fmt.first_line_indent = Pt(left-text_left)
+                break
+            consumed += len(glyph[0])
+    gaps = span_gaps(line.spans)
+    if gaps:
+        split = min(gaps)
+        marker = ''.join(s.text for s in line.spans[:split]).strip()
+        if re.fullmatch(r'(?:[-*+\u2022\u25e6\u25aa\u2013\u2014]|\(?\d+[.)]|[A-Za-z][.)])',marker):
+            text_left = gaps[split]-origin
+            fmt.left_indent = Pt(text_left)
+            fmt.first_line_indent = Pt(left-text_left)
+    write_spans(paragraph, line.spans, tab_origin=origin)
 
 
 class Writer:
@@ -133,6 +195,19 @@ class Writer:
         self.count += 1
 
     def line(self, line, page_width):
+        # Bidirectional PDF runs can be stored in logical order while their
+        # physical positions go backwards. Word tabs only move forwards; keep
+        # these runs in separate source-positioned frames instead.
+        if any(b.bbox[0] < a.bbox[0]-1 for a,b in zip(line.spans,line.spans[1:])):
+            for span in line.spans:
+                glyphs = [glyph for glyph in span.glyphs if glyph[0].strip()]
+                if not span.text.strip():
+                    continue
+                box = (min(g[1][0] for g in glyphs), min(g[1][1] for g in glyphs),
+                       max(g[1][2] for g in glyphs), max(g[1][3] for g in glyphs)) if glyphs else span.bbox
+                fragment = replace(span, text=span.text.strip(), bbox=box)
+                self.line(replace(line, spans=[fragment], bbox=box), page_width)
+            return
         p = self.doc.add_paragraph()
         if line.heading_level is not None:
             p.style = f'Heading {line.heading_level}'
@@ -143,7 +218,7 @@ class Writer:
         frame = element('framePr', w=twips(width), x=twips(max(0,x)), y=twips(max(0,y)),
                         hAnchor='page', vAnchor='page', wrap='none', hSpace='0', vSpace='0')
         p._p.get_or_add_pPr().append(frame)
-        write_spans(p, line.spans)
+        paragraph_indent(p, line, x)
 
     def picture(self, anchor, picture):
         x0,y0,x1,y1 = picture.bbox
@@ -231,18 +306,7 @@ class Writer:
                 if i+1 < len(lines):
                     p.paragraph_format.space_after = Pt(max(0,pitch-height))
                 content_height+=height+(max(0,pitch-height) if i+1 < len(lines) else 0)
-                # Preserve cell insets measured from the text position.
-                left = max(0,line.spans[0].bbox[0]-source.bbox[0])
-                p.paragraph_format.left_indent = Pt(left)
-                gaps = span_gaps(line.spans)
-                if gaps:
-                    split = min(gaps)
-                    marker = ''.join(s.text for s in line.spans[:split]).strip()
-                    if re.fullmatch(r'(?:[-*+\u2022\u25e6\u25aa\u2013\u2014]|\(?\d+[.)]|[A-Za-z][.)])',marker):
-                        text_left = gaps[split]-source.bbox[0]
-                        p.paragraph_format.left_indent = Pt(text_left)
-                        p.paragraph_format.first_line_indent = Pt(left-text_left)
-                write_spans(p,line.spans,tab_origin=source.bbox[0])
+                paragraph_indent(p, line, source.bbox[0])
             if lines and any(s.text.strip() for line in lines for s in line.spans):
                 first=lines[0]
                 span=max(first.spans,key=lambda s:s.size)

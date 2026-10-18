@@ -35,8 +35,10 @@ def merge_cell_lines(lines):
 
 def span_gaps(spans):
     """Return horizontal gaps that need a tab rather than an ordinary space."""
+    # PDF position rounding is sub-point. A font-size-relative cutoff drops
+    # real short gaps, especially after wider, multi-digit list markers.
     return {i:span.bbox[0] for i,span in enumerate(spans) if i
-            and span.bbox[0]-spans[i-1].bbox[2] > max(1,min(span.size,spans[i-1].size)*.25)}
+            and span.bbox[0]-spans[i-1].bbox[2] > .5}
 
 
 def vertical_alignment(cell):
