@@ -175,10 +175,7 @@ class Writer:
         section.left_margin = section.right_margin = Pt(0)
         section.top_margin = section.bottom_margin = Pt(0)
         section.header_distance = section.footer_distance = Pt(0)
-        if self.count == 0:
-            anchor = self.doc.add_paragraph()
-        else:
-            anchor = self.doc.add_paragraph()
+        anchor = self.doc.add_paragraph()
         compact(anchor)
         bookmark_id = str(page.number)
         anchor._p.append(element('bookmarkStart', id=bookmark_id, name=f'pdf_page_{page.number}'))
@@ -213,7 +210,7 @@ class Writer:
             p.style = f'Heading {line.heading_level}'
         size = max(s.size for s in line.spans)
         compact(p, max(size*1.15, line.bbox[3]-line.bbox[1]))
-        x, y, right, bottom = line.bbox
+        x, y, right, _ = line.bbox
         width = min(page_width-x, max(2, right-x+3))
         frame = element('framePr', w=twips(width), x=twips(max(0,x)), y=twips(max(0,y)),
                         hAnchor='page', vAnchor='page', wrap='none', hSpace='0', vSpace='0')
@@ -273,9 +270,6 @@ class Writer:
         for side in ('top','bottom','left','right','insideH','insideV'):
             borders.append(element(side, val='single', sz=max(2,round(table.border_width*8)), color=table.border_color))
         props.append(borders)
-        for ri, row in enumerate(t.rows):
-            row.height = Pt(table.ys[ri+1]-table.ys[ri])
-            # Minimum heights allow edits without truncating the source text.
         reference_baselines=top_baselines(table)
         row_top=[0]*rows
         row_bottom=[0]*rows
