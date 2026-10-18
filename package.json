@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "engine:build": "python scripts/build_word_engine.py"
+    "engine:build": "python scripts/build_word_engine.py",
+    "build:all": "npm run engine:build && npm run tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

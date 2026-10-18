@@ -1,0 +1,82 @@
+name: "Release PDF Utils"
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag name for release (e.g. v1.0.0)"
+        required: false
+        default: "v1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: "Build & Release (Windows x64)"
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Rust Stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Standalone Word Engine
+        run: npm run engine:build
+
+      - name: Build Tauri App & Publish Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || (inputs.tag_name || 'v1.0.0') }}
+          releaseName: "PDF Utils ${{ github.ref_type == 'tag' && github.ref_name || (inputs.tag_name || 'v1.0.0') }}"
+          releaseBody: |
+            ## 📄 PDF Utils Release
+            
+            Aplikasi desktop pengolah dokumen PDF (Image to PDF, Merge, Split, Viewer, PDF to Word).
+            
+            ### ✨ Highlight:
+            - **Single Portable Executable & Installer**
+            - **Zero-Configuration**: Engine Word tertanam langsung (tanpa perlu Python di sistem user).
+            - Versi: ${{ github.ref_type == 'tag' && github.ref_name || (inputs.tag_name || 'v1.0.0') }}
+          releaseDraft: false
+          prerelease: false
+
+      - name: Upload Standalone Portable Exe
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_type == 'tag' && github.ref_name || (inputs.tag_name || 'v1.0.0') }}"
+          $portableExe = "src-tauri/target/release/pdf-utils.exe"
+          if (Test-Path $portableExe) {
+            Copy-Item $portableExe "pdf-utils-portable-x64.exe"
+            gh release upload $tag "pdf-utils-portable-x64.exe" --clobber
+          }
