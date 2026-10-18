@@ -22,6 +22,7 @@ export default function Home() {
     { path: "/maker/merge", icon: "📑", title: t("nav.mergePdf"), desc: t("home.desc.merge"), color: "#6366f1" },
     { path: "/maker/split", icon: "✂", title: t("nav.splitPdf"), desc: t("home.desc.split"), color: "#22c55e" },
     { path: "/viewer", icon: "🔍", title: t("nav.viewer"), desc: t("home.desc.viewer"), color: "#f59e0b" },
+    { path: "/converter/pdf-to-word", icon: "📝", title: t("word.title"), desc: t("word.description"), color: "#3b82f6" },
   ];
 
   return (

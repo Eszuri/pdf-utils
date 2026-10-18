@@ -1,0 +1,15 @@
+.word-page { max-width: 680px; }
+.word-help { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
+.word-drop { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; background: transparent; color: var(--text-primary); font: inherit; }
+.word-drop strong { max-width: 100%; overflow-wrap: anywhere; }
+.word-drop > span:last-child { font-size: 13px; color: var(--text-muted); }
+.word-drop:disabled { opacity: .6; cursor: default; }
+.word-actions { display: flex; gap: 12px; }
+.word-progress { display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.word-progress progress { width: 100%; accent-color: var(--accent); }
+.word-message { padding: 14px; border-radius: var(--radius); font-size: 13px; line-height: 1.6; display: flex; flex-direction: column; gap: 8px; }
+.word-message.error { background: rgba(244,63,94,.08); color: var(--danger); overflow-wrap: anywhere; }
+.word-message.success { border: 1px solid var(--border-color); background: var(--bg-elevated); }
+.word-output { overflow-wrap: anywhere; color: var(--text-muted); }
+.word-message ul { padding-left: 18px; max-height: 180px; overflow: auto; }
+.word-message summary { cursor: pointer; }

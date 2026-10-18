@@ -5,6 +5,7 @@ import { ToastProvider } from "./components/Toast";
 import { SettingsProvider } from "./contexts/SettingsContext";
 import { ToolStateProvider } from "./contexts/ToolStateContext";
 import App from "./App";
+import { WordProvider } from "./contexts/WordContext";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
@@ -12,7 +13,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <ToolStateProvider>
         <BrowserRouter>
           <ToastProvider>
-            <App />
+            <WordProvider><App /></WordProvider>
           </ToastProvider>
         </BrowserRouter>
       </ToolStateProvider>

@@ -9,6 +9,10 @@ src-tauri/gen
 build/
 __pycache__/
 *.pyc
+tmp/
+output/
+src-tauri/binaries/*.exe
+src-tauri/binaries/pdf-word-engine-*
 
 # Logs
 *.log

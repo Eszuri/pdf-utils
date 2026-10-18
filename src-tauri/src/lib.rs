@@ -1,10 +1,12 @@
 mod commands;
+mod word;
 
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(word::WordJobs::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -21,6 +23,9 @@ pub fn run() {
             commands::get_pdf_info,
             commands::read_pdf_bytes,
             commands::show_in_folder,
+            word::word_engine_status,
+            word::convert_word,
+            word::cancel_word_conversion,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

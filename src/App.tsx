@@ -8,6 +8,7 @@ import MergePdf from "./pages/MergePdf";
 import SplitPdf from "./pages/SplitPdf";
 import Viewer from "./pages/Viewer";
 import Settings from "./pages/Settings";
+import PdfToWord from "./pages/PdfToWord";
 import "./App.css";
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
           <Route path="maker/merge" element={<MergePdf />} />
           <Route path="maker/split" element={<SplitPdf />} />
           <Route path="viewer" element={<Viewer />} />
+          <Route path="converter/pdf-to-word" element={<PdfToWord />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
