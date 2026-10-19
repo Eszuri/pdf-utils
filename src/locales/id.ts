@@ -30,6 +30,8 @@ export default {
   "settings.accent": "Warna Tema",
   "settings.openExplorer": "Buka File Explorer Setelah Export",
   "settings.openExplorerDesc": "Secara otomatis membuka folder dan menyorot file yang baru saja dibuat setelah proses selesai.",
+  "settings.contextMenu": "Menu Konteks Windows Explorer",
+  "settings.contextMenuDesc": "Tambahkan opsi klik kanan pada file PDF di File Explorer ('PDF to Word' & 'Buka dengan PDF Utils').",
   "settings.on": "Nyala",
   "settings.off": "Mati",
   "nav.tools": "Alat",

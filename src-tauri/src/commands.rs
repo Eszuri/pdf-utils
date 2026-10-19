@@ -267,3 +267,66 @@ pub fn show_in_folder(path: String) -> Result<(), String> {
     
     Ok(())
 }
+
+#[derive(Default)]
+pub struct LaunchFile(pub std::sync::Mutex<Option<String>>);
+
+#[tauri::command]
+pub fn get_launch_file(state: tauri::State<'_, LaunchFile>) -> Option<String> {
+    state.0.lock().ok()?.take()
+}
+
+#[tauri::command]
+pub fn is_context_menu_enabled() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsToWord";
+        match hkcu.open_subkey(path) {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(false)
+    }
+}
+
+#[tauri::command]
+pub fn toggle_context_menu(enable: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use winreg::enums::*;
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let word_path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsToWord";
+        let open_path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsOpen";
+
+        if enable {
+            let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
+            let exe_str = exe_path.to_string_lossy();
+
+            // 1. PDF to Word (background conversion)
+            let (word_key, _) = hkcu.create_subkey(word_path).map_err(|e| e.to_string())?;
+            word_key.set_value("", &"PDF to Word (PDF Utils)").map_err(|e| e.to_string())?;
+            word_key.set_value("Icon", &format!("\"{}\",0", exe_str)).unwrap_or(());
+            let (word_cmd, _) = word_key.create_subkey("command").map_err(|e| e.to_string())?;
+            word_cmd.set_value("", &format!("\"{}\" --context-pdf2word \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+
+            // 2. Open with PDF Utils
+            let (open_key, _) = hkcu.create_subkey(open_path).map_err(|e| e.to_string())?;
+            open_key.set_value("", &"Buka dengan PDF Utils").map_err(|e| e.to_string())?;
+            open_key.set_value("Icon", &format!("\"{}\",0", exe_str)).unwrap_or(());
+            let (open_cmd, _) = open_key.create_subkey("command").map_err(|e| e.to_string())?;
+            open_cmd.set_value("", &format!("\"{}\" \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+        } else {
+            let _ = hkcu.delete_subkey_all(word_path);
+            let _ = hkcu.delete_subkey_all(open_path);
+        }
+    }
+    Ok(())
+}
+

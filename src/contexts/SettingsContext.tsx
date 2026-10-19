@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { translations, Language, TranslationKey } from "../locales";
 
 interface SettingsContextType {
@@ -8,6 +9,8 @@ interface SettingsContextType {
   setAccentColor: (color: string) => void;
   openExplorer: boolean;
   setOpenExplorer: (val: boolean) => void;
+  pdfContextMenu: boolean;
+  setPdfContextMenu: (val: boolean) => void;
   t: (key: TranslationKey) => string;
 }
 
@@ -18,6 +21,8 @@ const defaultContext: SettingsContextType = {
   setAccentColor: () => {},
   openExplorer: true,
   setOpenExplorer: () => {},
+  pdfContextMenu: false,
+  setPdfContextMenu: () => {},
   t: (key) => key,
 };
 
@@ -49,6 +54,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return val !== null ? val === "true" : true;
   });
 
+  const [pdfContextMenu, setPdfContextMenuState] = useState<boolean>(() => {
+    return localStorage.getItem("app_pdf_context_menu") === "true";
+  });
+
+  useEffect(() => {
+    invoke<boolean>("is_context_menu_enabled")
+      .then((enabled) => {
+        setPdfContextMenuState(enabled);
+        localStorage.setItem("app_pdf_context_menu", String(enabled));
+      })
+      .catch(console.error);
+  }, []);
+
+  const setPdfContextMenu = (val: boolean) => {
+    setPdfContextMenuState(val);
+    localStorage.setItem("app_pdf_context_menu", String(val));
+    invoke("toggle_context_menu", { enable: val }).catch(console.error);
+  };
+
   useEffect(() => {
     localStorage.setItem("app_lang", language);
   }, [language]);
@@ -77,7 +101,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SettingsContext.Provider value={{ language, setLanguage, accentColor, setAccentColor, openExplorer, setOpenExplorer, t }}>
+    <SettingsContext.Provider value={{ language, setLanguage, accentColor, setAccentColor, openExplorer, setOpenExplorer, pdfContextMenu, setPdfContextMenu, t }}>
       {children}
     </SettingsContext.Provider>
   );

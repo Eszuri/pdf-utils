@@ -34,6 +34,8 @@ export default {
   "settings.accent": "Accent Color",
   "settings.openExplorer": "Open Explorer After Export",
   "settings.openExplorerDesc": "Automatically open the folder and highlight the newly created file after a process completes.",
+  "settings.contextMenu": "Windows Explorer Context Menu",
+  "settings.contextMenuDesc": "Add right-click options for PDF files in File Explorer ('PDF to Word' & 'Open with PDF Utils').",
   "settings.on": "On",
   "settings.off": "Off",
   "nav.viewer": "PDF Viewer",

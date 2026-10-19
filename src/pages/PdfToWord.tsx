@@ -72,7 +72,7 @@ export default function PdfToWord() {
     if (!word.file || busy) return;
     try {
       const output = await save({
-        defaultPath: word.file.name.replace(/\.pdf$/i, ".docx"),
+        defaultPath: word.file.name.replace(/\.pdf$/i, "_convert.docx"),
         filters: [{ name: "Word Document", extensions: ["docx"] }],
       });
       if (output) {

@@ -1,6 +1,8 @@
-import { useLocation } from "react-router-dom";
-import { Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
+import { useLocation, useNavigate, Routes, Route } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
 import { AnimatePresence } from "framer-motion";
+import { useToolState } from "./contexts/ToolStateContext";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import ImageToPdf from "./pages/ImageToPdf";
@@ -13,6 +15,19 @@ import "./App.css";
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { setViewerFilePath } = useToolState();
+
+  useEffect(() => {
+    invoke<string | null>("get_launch_file")
+      .then((filePath) => {
+        if (filePath) {
+          setViewerFilePath(filePath);
+          navigate("/viewer");
+        }
+      })
+      .catch(console.error);
+  }, [navigate, setViewerFilePath]);
 
   return (
     <AnimatePresence mode="wait">

@@ -104,7 +104,7 @@ fn get_or_extract_engine(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Err("ENGINE_MISSING: build the bundled Word engine with npm run engine:build".into())
 }
 
-fn engine_command(app: &tauri::AppHandle) -> Result<Command, String> {
+pub fn engine_command(app: &tauri::AppHandle) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
         if std::env::var("PDF_UTILS_FORCE_PYTHON").is_ok() {
