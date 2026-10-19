@@ -125,6 +125,7 @@ pub fn run() {
             commands::split_pdf,
             commands::get_pdf_info,
             commands::read_pdf_bytes,
+            commands::save_reader_file,
             commands::show_in_folder,
             commands::is_context_menu_enabled,
             commands::toggle_context_menu,

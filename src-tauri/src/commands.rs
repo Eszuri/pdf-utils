@@ -235,6 +235,32 @@ pub fn read_pdf_bytes(path: String) -> Result<Vec<u8>, String> {
     std::fs::read(&path).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn save_reader_file(data: Vec<u8>, output_path: String) -> Result<(), String> {
+    use std::io::Write;
+    let output = std::path::PathBuf::from(output_path);
+    let parent = output.parent().ok_or("Invalid output directory")?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let temporary = parent.join(format!(".pdf-utils-save-{}-{nonce}.tmp", std::process::id()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|e| e.to_string())?;
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+    }
+    let _cleanup = Cleanup(temporary.clone());
+    let write_result = file.write_all(&data).and_then(|_| file.sync_all());
+    drop(file);
+    write_result.map_err(|e| e.to_string())?;
+    std::fs::rename(&temporary, &output).map_err(|e| e.to_string())
+}
+
 
 #[tauri::command]
 pub fn show_in_folder(path: String) -> Result<(), String> {

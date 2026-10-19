@@ -1,4 +1,4 @@
-import {Outlet, NavLink, useNavigate} from "react-router-dom";
+import {Outlet, NavLink, useNavigate, useLocation} from "react-router-dom";
 import {motion} from "framer-motion";
 import {useSettings} from "../contexts/SettingsContext";
 import "./Layout.css";
@@ -6,6 +6,11 @@ import "./Layout.css";
 export default function Layout() {
     const navigate = useNavigate();
     const {t} = useSettings();
+    const location = useLocation();
+
+    if (location.pathname === "/viewer") {
+        return <main className="viewer-shell"><Outlet /></main>;
+    }
 
     const navItems = [
         {to: "/maker/image", label: t("nav.imageToPdf"), icon: "🖼"},

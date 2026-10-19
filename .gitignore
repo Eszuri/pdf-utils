@@ -3,6 +3,7 @@ node_modules/
 
 # Build & Compiled Outputs
 dist/
+public/pdfjs/
 dist-ssr/
 src-tauri/target/
 src-tauri/gen
