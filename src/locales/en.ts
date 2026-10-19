@@ -35,7 +35,7 @@ export default {
   "settings.openExplorer": "Open Explorer After Export",
   "settings.openExplorerDesc": "Automatically open the folder and highlight the newly created file after a process completes.",
   "settings.contextMenu": "Windows Explorer Context Menu",
-  "settings.contextMenuDesc": "Add right-click options for PDF files in File Explorer ('PDF to Word' & 'Open with PDF Utils').",
+  "settings.contextMenuDesc": "Add 'PDF Utils' right-click menu in Windows Explorer for all features (Viewer, Word, Split, Merge, and Image to PDF).",
   "settings.on": "On",
   "settings.off": "Off",
   "nav.viewer": "PDF Viewer",

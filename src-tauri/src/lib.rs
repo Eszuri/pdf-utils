@@ -7,7 +7,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .manage(word::WordJobs::default())
-        .manage(commands::LaunchFile::default())
+        .manage(commands::LaunchState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -37,14 +37,78 @@ pub fn run() {
                 }
             }
 
-            // Check if opened with a PDF file (e.g. "Buka dengan PDF Utils")
-            if let Some(file_arg) = args.iter().skip(1).find(|a| !a.starts_with("--") && a.to_lowercase().ends_with(".pdf")) {
-                let path = std::path::Path::new(file_arg);
-                if path.is_file() {
-                    if let Some(launch_file) = app.try_state::<commands::LaunchFile>() {
-                        if let Ok(mut guard) = launch_file.0.lock() {
-                            *guard = Some(file_arg.clone());
+            let mut launch_action: Option<commands::LaunchAction> = None;
+
+            if let Some(pos) = args.iter().position(|a| a == "--viewer") {
+                if let Some(file) = args.get(pos + 1) {
+                    if std::path::Path::new(file).is_file() {
+                        launch_action = Some(commands::LaunchAction {
+                            mode: "viewer".to_string(),
+                            file: file.clone(),
+                        });
+                    }
+                }
+            } else if let Some(pos) = args.iter().position(|a| a == "--split") {
+                if let Some(file) = args.get(pos + 1) {
+                    if std::path::Path::new(file).is_file() {
+                        launch_action = Some(commands::LaunchAction {
+                            mode: "split".to_string(),
+                            file: file.clone(),
+                        });
+                    }
+                }
+            } else if let Some(pos) = args.iter().position(|a| a == "--merge") {
+                if let Some(file) = args.get(pos + 1) {
+                    if std::path::Path::new(file).is_file() {
+                        launch_action = Some(commands::LaunchAction {
+                            mode: "merge".to_string(),
+                            file: file.clone(),
+                        });
+                    }
+                }
+            } else if let Some(pos) = args.iter().position(|a| a == "--image") {
+                if let Some(file) = args.get(pos + 1) {
+                    if std::path::Path::new(file).is_file() {
+                        launch_action = Some(commands::LaunchAction {
+                            mode: "image".to_string(),
+                            file: file.clone(),
+                        });
+                    }
+                }
+            } else {
+                for arg in args.iter().skip(1) {
+                    if arg.starts_with("--") {
+                        continue;
+                    }
+                    let p = std::path::Path::new(arg);
+                    if p.is_file() {
+                        let lower = arg.to_lowercase();
+                        if lower.ends_with(".pdf") {
+                            launch_action = Some(commands::LaunchAction {
+                                mode: "viewer".to_string(),
+                                file: arg.clone(),
+                            });
+                            break;
+                        } else if lower.ends_with(".png")
+                            || lower.ends_with(".jpg")
+                            || lower.ends_with(".jpeg")
+                            || lower.ends_with(".webp")
+                            || lower.ends_with(".bmp")
+                        {
+                            launch_action = Some(commands::LaunchAction {
+                                mode: "image".to_string(),
+                                file: arg.clone(),
+                            });
+                            break;
                         }
+                    }
+                }
+            }
+
+            if let Some(action) = launch_action {
+                if let Some(state) = app.try_state::<commands::LaunchState>() {
+                    if let Ok(mut guard) = state.0.lock() {
+                        *guard = Some(action);
                     }
                 }
             }
@@ -64,6 +128,7 @@ pub fn run() {
             commands::show_in_folder,
             commands::is_context_menu_enabled,
             commands::toggle_context_menu,
+            commands::get_launch_action,
             commands::get_launch_file,
             word::word_engine_status,
             word::convert_word,

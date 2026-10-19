@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import * as pdfjsLib from "pdfjs-dist";
@@ -69,6 +69,12 @@ export default function SplitPdf() {
     }
     setThumbsLoading(false);
   }, [setFilePath, setFileName, setPageThumbs, setSelectedPages, setPageCount, showToast]);
+
+  useEffect(() => {
+    if (filePath && pageThumbs.length === 0 && !thumbsLoading) {
+      loadPdf(filePath);
+    }
+  }, [filePath, pageThumbs.length, thumbsLoading, loadPdf]);
 
   const handleFileDrop = useCallback((paths: string[]) => {
     if (paths.length > 0) {

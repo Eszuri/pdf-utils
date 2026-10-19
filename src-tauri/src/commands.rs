@@ -268,13 +268,26 @@ pub fn show_in_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Default, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LaunchAction {
+    pub mode: String,
+    pub file: String,
+}
+
 #[derive(Default)]
-pub struct LaunchFile(pub std::sync::Mutex<Option<String>>);
+pub struct LaunchState(pub std::sync::Mutex<Option<LaunchAction>>);
 
 #[tauri::command]
-pub fn get_launch_file(state: tauri::State<'_, LaunchFile>) -> Option<String> {
+pub fn get_launch_action(state: tauri::State<'_, LaunchState>) -> Option<LaunchAction> {
     state.0.lock().ok()?.take()
 }
+
+#[tauri::command]
+pub fn get_launch_file(state: tauri::State<'_, LaunchState>) -> Option<String> {
+    state.0.lock().ok()?.as_ref().map(|a| a.file.clone())
+}
+
+const IMAGE_EXTENSIONS: &[&str] = &[".png", ".jpg", ".jpeg", ".webp", ".bmp"];
 
 #[tauri::command]
 pub fn is_context_menu_enabled() -> Result<bool, String> {
@@ -283,7 +296,7 @@ pub fn is_context_menu_enabled() -> Result<bool, String> {
         use winreg::enums::*;
         use winreg::RegKey;
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        let path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsToWord";
+        let path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtils";
         match hkcu.open_subkey(path) {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
@@ -302,31 +315,73 @@ pub fn toggle_context_menu(enable: bool) -> Result<(), String> {
         use winreg::enums::*;
         use winreg::RegKey;
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        let word_path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsToWord";
-        let open_path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsOpen";
+        let pdf_menu_path = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtils";
+        let legacy_word = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsToWord";
+        let legacy_open = "Software\\Classes\\SystemFileAssociations\\.pdf\\shell\\PDFUtilsOpen";
+
+        // Clean up legacy keys
+        let _ = hkcu.delete_subkey_all(legacy_word);
+        let _ = hkcu.delete_subkey_all(legacy_open);
 
         if enable {
             let exe_path = std::env::current_exe().map_err(|e| e.to_string())?;
             let exe_str = exe_path.to_string_lossy();
+            let icon_val = format!("\"{}\",0", exe_str);
 
-            // 1. PDF to Word (background conversion)
-            let (word_key, _) = hkcu.create_subkey(word_path).map_err(|e| e.to_string())?;
-            word_key.set_value("", &"PDF to Word (PDF Utils)").map_err(|e| e.to_string())?;
-            word_key.set_value("Icon", &format!("\"{}\",0", exe_str)).unwrap_or(());
-            let (word_cmd, _) = word_key.create_subkey("command").map_err(|e| e.to_string())?;
-            word_cmd.set_value("", &format!("\"{}\" --context-pdf2word \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+            // 1. Cascading Context Menu for .pdf
+            let (pdf_key, _) = hkcu.create_subkey(pdf_menu_path).map_err(|e| e.to_string())?;
+            pdf_key.set_value("", &"PDF Utils").map_err(|e| e.to_string())?;
+            pdf_key.set_value("MUIVerb", &"PDF Utils").map_err(|e| e.to_string())?;
+            pdf_key.set_value("Icon", &icon_val).unwrap_or(());
+            pdf_key.set_value("SubCommands", &"").map_err(|e| e.to_string())?;
 
-            // 2. Open with PDF Utils
-            let (open_key, _) = hkcu.create_subkey(open_path).map_err(|e| e.to_string())?;
-            open_key.set_value("", &"Buka dengan PDF Utils").map_err(|e| e.to_string())?;
-            open_key.set_value("Icon", &format!("\"{}\",0", exe_str)).unwrap_or(());
-            let (open_cmd, _) = open_key.create_subkey("command").map_err(|e| e.to_string())?;
-            open_cmd.set_value("", &format!("\"{}\" \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+            // Subkey 1: PDF Viewer
+            let (v_key, _) = pdf_key.create_subkey("shell\\01_viewer").map_err(|e| e.to_string())?;
+            v_key.set_value("", &"Buka di PDF Viewer").map_err(|e| e.to_string())?;
+            v_key.set_value("MUIVerb", &"Buka di PDF Viewer").map_err(|e| e.to_string())?;
+            let (v_cmd, _) = v_key.create_subkey("command").map_err(|e| e.to_string())?;
+            v_cmd.set_value("", &format!("\"{}\" --viewer \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+
+            // Subkey 2: PDF to Word
+            let (w_key, _) = pdf_key.create_subkey("shell\\02_word").map_err(|e| e.to_string())?;
+            w_key.set_value("", &"Konversi ke Word (.docx)").map_err(|e| e.to_string())?;
+            w_key.set_value("MUIVerb", &"Konversi ke Word (.docx)").map_err(|e| e.to_string())?;
+            let (w_cmd, _) = w_key.create_subkey("command").map_err(|e| e.to_string())?;
+            w_cmd.set_value("", &format!("\"{}\" --context-pdf2word \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+
+            // Subkey 3: Split PDF
+            let (s_key, _) = pdf_key.create_subkey("shell\\03_split").map_err(|e| e.to_string())?;
+            s_key.set_value("", &"Pisahkan Halaman (Split PDF)").map_err(|e| e.to_string())?;
+            s_key.set_value("MUIVerb", &"Pisahkan Halaman (Split PDF)").map_err(|e| e.to_string())?;
+            let (s_cmd, _) = s_key.create_subkey("command").map_err(|e| e.to_string())?;
+            s_cmd.set_value("", &format!("\"{}\" --split \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+
+            // Subkey 4: Merge PDF
+            let (m_key, _) = pdf_key.create_subkey("shell\\04_merge").map_err(|e| e.to_string())?;
+            m_key.set_value("", &"Gabungkan File (Merge PDF)").map_err(|e| e.to_string())?;
+            m_key.set_value("MUIVerb", &"Gabungkan File (Merge PDF)").map_err(|e| e.to_string())?;
+            let (m_cmd, _) = m_key.create_subkey("command").map_err(|e| e.to_string())?;
+            m_cmd.set_value("", &format!("\"{}\" --merge \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+
+            // 2. Direct Context Menu for Image files (.png, .jpg, .jpeg, .webp, .bmp)
+            for ext in IMAGE_EXTENSIONS {
+                let img_path = format!("Software\\Classes\\SystemFileAssociations\\{}\\shell\\PDFUtilsImage", ext);
+                let (img_key, _) = hkcu.create_subkey(&img_path).map_err(|e| e.to_string())?;
+                img_key.set_value("", &"Konversi ke PDF (PDF Utils)").map_err(|e| e.to_string())?;
+                img_key.set_value("MUIVerb", &"Konversi ke PDF (PDF Utils)").map_err(|e| e.to_string())?;
+                img_key.set_value("Icon", &icon_val).unwrap_or(());
+                let (img_cmd, _) = img_key.create_subkey("command").map_err(|e| e.to_string())?;
+                img_cmd.set_value("", &format!("\"{}\" --image \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+            }
         } else {
-            let _ = hkcu.delete_subkey_all(word_path);
-            let _ = hkcu.delete_subkey_all(open_path);
+            let _ = hkcu.delete_subkey_all(pdf_menu_path);
+            for ext in IMAGE_EXTENSIONS {
+                let img_path = format!("Software\\Classes\\SystemFileAssociations\\{}\\shell\\PDFUtilsImage", ext);
+                let _ = hkcu.delete_subkey_all(&img_path);
+            }
         }
     }
     Ok(())
 }
+
 
