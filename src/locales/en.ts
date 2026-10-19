@@ -10,6 +10,7 @@ export default {
   "word.remove": "Remove selection",
   "word.convert": "Convert to Word",
   "word.cancel": "Cancel",
+  "splitPdf.retry": "Try again",
   "word.cancelling": "Cancelling conversion…",
   "word.cancelled": "Conversion cancelled. The destination file was not changed.",
   "word.reading": "Reading document…",

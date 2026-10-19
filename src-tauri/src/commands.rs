@@ -2,7 +2,7 @@ use printpdf::{
     Mm, Op, PdfDocument, PdfPage, PdfSaveOptions, Pt, RawImage, RawImageData,
     RawImageFormat, XObjectTransform,
 };
-use lopdf::{Document, Object};
+use lopdf::{dictionary, Document, Object};
 use std::collections::HashMap;
 
 fn remap_references(obj: &Object, id_map: &HashMap<(u32, u16), (u32, u16)>) -> Object {
@@ -122,9 +122,37 @@ pub fn merge_pdfs(input_paths: Vec<String>, output_path: String) -> Result<(), S
     let mut result = Document::load(&input_paths[0]).map_err(|e| e.to_string())?;
     result.decompress();
 
+    // Keep each document's page tree intact under a neutral root. Reparenting
+    // individual pages loses inherited Resources, MediaBox, CropBox and Rotate.
+    let first_root = result
+        .catalog()
+        .and_then(|c| c.get(b"Pages"))
+        .and_then(Object::as_reference)
+        .map_err(|e| e.to_string())?;
+    let mut page_count = result.get_pages().len() as i64;
+    let pages_root_id = result.add_object(dictionary! {
+        "Type" => "Pages",
+        "Kids" => vec![Object::Reference(first_root)],
+        "Count" => page_count,
+    });
+    result
+        .get_dictionary_mut(first_root)
+        .map_err(|e| e.to_string())?
+        .set("Parent", pages_root_id);
+    result
+        .catalog_mut()
+        .map_err(|e| e.to_string())?
+        .set("Pages", pages_root_id);
+
     for path in &input_paths[1..] {
         let mut doc = Document::load(path).map_err(|e| e.to_string())?;
         doc.decompress();
+        let source_root = doc
+            .catalog()
+            .and_then(|c| c.get(b"Pages"))
+            .and_then(Object::as_reference)
+            .map_err(|e| e.to_string())?;
+        page_count += doc.get_pages().len() as i64;
 
         let offset = result.max_id;
         let old_ids: Vec<(u32, u16)> = doc.objects.keys().copied().collect();
@@ -134,14 +162,7 @@ pub fn merge_pdfs(input_paths: Vec<String>, output_path: String) -> Result<(), S
             id_map.insert(old_id, new_id);
         }
 
-        let doc_pages: Vec<(u32, (u32, u16))> = doc
-            .get_pages()
-            .into_iter()
-            .map(|(page_num, page_id)| {
-                let new_page_id = id_map[&page_id];
-                (page_num, (new_page_id.0, new_page_id.1))
-            })
-            .collect();
+        let imported_root = id_map[&source_root];
 
         for (&old_id, obj) in &doc.objects {
             let &new_id = &id_map[&old_id];
@@ -150,41 +171,19 @@ pub fn merge_pdfs(input_paths: Vec<String>, output_path: String) -> Result<(), S
         }
         result.max_id = offset + old_ids.len() as u32;
 
-        let pages_root_id = {
-            let catalog = result.catalog().map_err(|e| e.to_string())?;
-            let pages_ref = catalog.get(b"Pages").map_err(|e| e.to_string())?;
-            pages_ref.as_reference().map_err(|e| e.to_string())?
-        };
-
-        let pages_dict = result
-            .get_dictionary(pages_root_id)
+        result
+            .get_dictionary_mut(imported_root)
             .map_err(|e| e.to_string())?
-            .clone();
-
-        let mut kids: Vec<Object> = pages_dict
-            .get(b"Kids")
-            .ok()
-            .and_then(|o| o.as_array().ok())
-            .cloned()
-            .unwrap_or_default();
-
-        let old_count = pages_dict
-            .get(b"Count")
-            .ok()
-            .and_then(|o| o.as_i64().ok())
-            .unwrap_or(0);
-
-        for &(_, new_page_id) in &doc_pages {
-            if let Ok(page_dict) = result.get_dictionary_mut(new_page_id) {
-                page_dict.set("Parent", Object::Reference(pages_root_id));
-            }
-            kids.push(Object::Reference(new_page_id));
-        }
-
-        if let Ok(pages_dict) = result.get_dictionary_mut(pages_root_id) {
-            pages_dict.set("Kids", Object::Array(kids));
-            pages_dict.set("Count", old_count + doc_pages.len() as i64);
-        }
+            .set("Parent", pages_root_id);
+        let pages_dict = result
+            .get_dictionary_mut(pages_root_id)
+            .map_err(|e| e.to_string())?;
+        pages_dict
+            .get_mut(b"Kids")
+            .and_then(Object::as_array_mut)
+            .map_err(|e| e.to_string())?
+            .push(Object::Reference(imported_root));
+        pages_dict.set("Count", page_count);
     }
 
     result.save(&output_path).map_err(|e| e.to_string())?;

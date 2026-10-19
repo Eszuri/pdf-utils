@@ -57,9 +57,12 @@ export function WordProvider({ children }: { children: ReactNode }) {
   }
   async function cancel() {
     if (!activeJob.current) return;
+    const jobId = activeJob.current;
     setStatus("cancelling");
-    try { await invoke("cancel_word_conversion", { jobId: activeJob.current }); }
-    catch (failure) { setError(String(failure)); setStatus("converting"); }
+    try { await invoke("cancel_word_conversion", { jobId }); }
+    catch (failure) {
+      if (activeJob.current === jobId) { setError(String(failure)); setStatus("converting"); }
+    }
   }
   return <Context.Provider value={{ file, setFile, status, progress, result, error, convert, cancel }}>{children}</Context.Provider>;
 }

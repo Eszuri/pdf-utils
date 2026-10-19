@@ -15,6 +15,11 @@ export default function PdfToWord() {
   const [selecting, setSelecting] = useState(false);
   const selection = useRef(0);
   const busy = word.status === "converting" || word.status === "cancelling";
+  const total = word.progress?.total ?? word.file?.pages ?? 0;
+  const completed = Math.min(total, Math.max(0, word.progress?.page ?? 0));
+  const progressLabel = word.status === "cancelling"
+    ? t("word.cancelling")
+    : word.progress ? t(`word.${word.progress.phase}`) : t("word.starting");
 
   const loadFile = useCallback(
     async (paths: string[]) => {
@@ -55,6 +60,7 @@ export default function PdfToWord() {
   const { isHovering } = useFileDrop(loadFile, ["pdf"], reject);
 
   async function selectFile() {
+    if (busy) return;
     try {
       const selected = await open({
         multiple: false,
@@ -117,8 +123,6 @@ export default function PdfToWord() {
         className="converter-card"
         style={{
           position: "relative",
-          pointerEvents: busy ? "none" : "auto",
-          opacity: busy ? 0.7 : 1,
         }}
       >
         {isHovering && !busy && (
@@ -152,7 +156,8 @@ export default function PdfToWord() {
             isHovering && !busy ? "is-hovering" : ""
           }`}
           onClick={selectFile}
-          style={{ margin: "0 0 20px 0" }}
+          aria-disabled={busy}
+          style={{ margin: "0 0 20px 0", opacity: busy ? 0.7 : 1, cursor: busy ? "default" : "pointer" }}
         >
           {selecting ? (
             <>
@@ -171,6 +176,7 @@ export default function PdfToWord() {
               </p>
               <button
                 className="btn-change"
+                disabled={busy}
                 onClick={(e) => {
                   e.stopPropagation();
                   selectFile();
@@ -238,6 +244,27 @@ export default function PdfToWord() {
             t("word.convert")
           )}
         </button>
+
+        {busy && (
+          <div className="word-progress">
+            <p role="status">
+              {progressLabel} {total > 0 && `(${completed}/${total} ${t("word.pages")})`}
+            </p>
+            <progress
+              aria-label={progressLabel}
+              max={total || 1}
+              value={word.progress ? completed : undefined}
+            />
+            <button
+              className="btn-secondary"
+              onClick={() => void word.cancel()}
+              disabled={word.status === "cancelling"}
+            >
+              {word.status === "cancelling" ? t("word.cancelling") : t("word.cancel")}
+            </button>
+          </div>
+        )}
+        {word.status === "cancelled" && <p role="status">{t("word.cancelled")}</p>}
       </div>
     </motion.div>
   );

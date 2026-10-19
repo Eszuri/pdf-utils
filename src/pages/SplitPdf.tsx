@@ -24,63 +24,85 @@ export default function SplitPdf() {
 
   const [loading, setLoading] = useState(false);
   const [thumbsLoading, setThumbsLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loadedPath, setLoadedPath] = useState(pageThumbs.length ? filePath : "");
+  const cachedPath = useRef(pageThumbs.length ? filePath : null);
   const [previewFile, setPreviewFile] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewToken = useRef(0);
   const { showToast } = useToast();
   const { t, openExplorer } = useSettings();
 
-  const loadPdf = useCallback(async (p: string) => {
-    setFilePath(p);
-    const name = p.split("\\").pop() || p.split("/").pop() || p;
+  useEffect(() => {
+    if (!filePath || (cachedPath.current === filePath && reloadKey === 0)) return;
+    cachedPath.current = null;
+    let disposed = false;
+    let task: pdfjsLib.PDFDocumentLoadingTask | undefined;
+    const name = filePath.split(/[\\/]/).pop() || filePath;
     setFileName(name);
+    setLoadedPath("");
+    setPageCount(0);
     setPageThumbs([]);
     setSelectedPages([]);
-
-    try {
-      const info: any = await invoke("get_pdf_info", { inputPath: p });
-      setPageCount(info.page_count);
-    } catch (e) {
-      showToast("error", `Gagal membaca PDF: ${e}`);
-      return;
-    }
-
+    setLoadError("");
     setThumbsLoading(true);
-    try {
-      const data: number[] = await invoke("read_pdf_bytes", { path: p });
-      const pdfData = new Uint8Array(data);
-      const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
 
-      const thumbs: { num: number; dataUrl: string }[] = [];
-      const offscreen = document.createElement("canvas");
-      const scale = 0.45;
+    async function loadPdf() {
+      try {
+        const info = await invoke<{ page_count: number }>("get_pdf_info", { inputPath: filePath });
+        if (disposed) return;
+        setPageCount(info.page_count);
+        setLoadedPath(filePath);
+        const data: number[] = await invoke("read_pdf_bytes", { path: filePath });
+        if (disposed) return;
+        const pdfData = new Uint8Array(data);
+        task = pdfjsLib.getDocument({ data: pdfData });
+        const pdfDoc = await task.promise;
+        if (disposed) return;
 
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale });
-        offscreen.height = viewport.height;
-        offscreen.width = viewport.width;
-        await page.render({ canvas: offscreen, viewport }).promise;
-        thumbs.push({ num: i, dataUrl: offscreen.toDataURL("image/png") });
+        const thumbs: { num: number; dataUrl: string }[] = [];
+        const offscreen = document.createElement("canvas");
+        const scale = 0.45;
+
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          if (disposed) return;
+          const viewport = page.getViewport({ scale });
+          offscreen.height = viewport.height;
+          offscreen.width = viewport.width;
+          await page.render({ canvas: offscreen, viewport }).promise;
+          if (disposed) return;
+          thumbs.push({ num: i, dataUrl: offscreen.toDataURL("image/png") });
+        }
+        setPageThumbs(thumbs);
+      } catch (e) {
+        if (!disposed) {
+          const message = `Gagal memuat PDF: ${e}`;
+          setLoadError(message);
+          showToast("error", message);
+        }
+      } finally {
+        if (!disposed) setThumbsLoading(false);
       }
-      setPageThumbs(thumbs);
-    } catch (e) {
-      showToast("error", `Gagal render thumbnail: ${e}`);
     }
-    setThumbsLoading(false);
-  }, [setFilePath, setFileName, setPageThumbs, setSelectedPages, setPageCount, showToast]);
+    void loadPdf();
+    return () => {
+      disposed = true;
+      void task?.destroy().catch(console.error);
+    };
+  }, [filePath, reloadKey, setFileName, setPageThumbs, setSelectedPages, setPageCount, showToast]);
 
-  useEffect(() => {
-    if (filePath && pageThumbs.length === 0 && !thumbsLoading) {
-      loadPdf(filePath);
-    }
-  }, [filePath, pageThumbs.length, thumbsLoading, loadPdf]);
+  const selectPdf = useCallback((path: string) => {
+    setFilePath(path);
+    setReloadKey((key) => key + 1);
+  }, [setFilePath]);
 
   const handleFileDrop = useCallback((paths: string[]) => {
     if (paths.length > 0) {
-      loadPdf(paths[0]);
+      selectPdf(paths[0]);
     }
-  }, [loadPdf]);
+  }, [selectPdf]);
 
   const handleReject = useCallback(() => {
     showToast("error", t("splitPdf.errFormat"));
@@ -101,7 +123,7 @@ export default function SplitPdf() {
       return;
     }
 
-    loadPdf(p);
+    selectPdf(p);
   }
 
   function togglePage(page: number) {
@@ -176,7 +198,9 @@ export default function SplitPdf() {
   }
 
   async function handleExtract() {
-    if (selectedPages.length === 0) return;
+    if (loading || thumbsLoading || loadedPath !== filePath || selectedPages.length === 0) return;
+    const inputPath = loadedPath;
+    const pages = [...selectedPages].sort((a, b) => a - b);
     const path = await save({
       filters: [{ name: "PDF", extensions: ["pdf"] }],
       defaultPath: "extracted.pdf",
@@ -185,7 +209,7 @@ export default function SplitPdf() {
 
     setLoading(true);
     try {
-      await invoke("split_pdf", { inputPath: filePath, pages: selectedPages.sort((a,b)=>a-b), outputPath: path });
+      await invoke("split_pdf", { inputPath, pages, outputPath: path });
       showToast("success", `PDF berhasil diekstrak: ${path}`);
       if (openExplorer) {
         invoke("show_in_folder", { path }).catch(e => console.error(e));
@@ -237,6 +261,15 @@ export default function SplitPdf() {
             </>
           )}
         </div>
+
+        {loadError && (
+          <div role="alert">
+            <p>{loadError}</p>
+            <button className="btn-secondary" onClick={() => setReloadKey((key) => key + 1)}>
+              {t("splitPdf.retry")}
+            </button>
+          </div>
+        )}
 
         <AnimatePresence>
           {filePath && (
@@ -343,7 +376,7 @@ export default function SplitPdf() {
         <button
           className="btn-convert"
           onClick={handleExtract}
-          disabled={loading || selectedPages.length === 0}
+          disabled={loading || thumbsLoading || loadedPath !== filePath || selectedPages.length === 0}
           style={{ marginTop: 12 }}
         >
           {loading ? (

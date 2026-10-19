@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import * as pdfjsLib from "pdfjs-dist";
@@ -29,15 +29,17 @@ export default function Viewer() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const { viewerFilePath: filePath, setViewerFilePath: setFilePath } = useToolState();
+  const [loadedFilePath, setLoadedFilePath] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ page: number; text: string }[] | null>(null);
   const activeSearchRef = useRef("");
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [pageThumbs, setPageThumbs] = useState<PageThumb[]>([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [scale, setScale] = useState(1.5);
   const scaleRef = useRef(1.5);
-  const renderTaskId = useRef(0);
   const [renderKey, setRenderKey] = useState(0);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
@@ -47,94 +49,121 @@ export default function Viewer() {
   const { showToast } = useToast();
   const { t } = useSettings();
 
-  const renderPage = useCallback(async (pdfDoc: pdfjsLib.PDFDocumentProxy, pageNum: number) => {
-    const taskId = ++renderTaskId.current;
-    const page = await pdfDoc.getPage(pageNum);
-    const s = scaleRef.current;
-    const viewport = page.getViewport({ scale: s });
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-    await page.render({ canvas, viewport }).promise;
-
-    const term = activeSearchRef.current;
-    if (term && taskId === renderTaskId.current) {
-      const textContent = await page.getTextContent();
-      const ctx = canvas.getContext("2d")!;
-      ctx.fillStyle = "rgba(255, 200, 0, 0.35)";
-      const lower = term.toLowerCase();
-      for (const item of textContent.items) {
-        if (!("str" in item)) continue;
-        const str: string = (item as any).str;
-        if (!str || !str.toLowerCase().includes(lower)) continue;
-        const tx = (item as any).transform;
-        const x = tx[4] * s;
-        const y = viewport.height - tx[5] * s;
-        const w = ((item as any).width * s) || 40;
-        const h = ((item as any).height * s) || 10;
-        ctx.fillRect(x, y - Math.abs(h), Math.max(w, 20), Math.abs(h));
-      }
-    }
-
-    if (taskId !== renderTaskId.current) return;
-  }, []);
-
-  const loadPdf = useCallback(async (p: string) => {
-    try {
-      setLoading(true);
-      const data: number[] = await invoke("read_pdf_bytes", { path: p });
-      const pdfData = new Uint8Array(data);
-      const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
-      setPdf(pdfDoc);
-      setTotalPages(pdfDoc.numPages);
-      setCurrentPage(1);
-      setSelectedPages(new Set());
-      setPageThumbs([]);
-      setScale(1.5);
-      scaleRef.current = 1.5;
-      setPanX(0);
-      setPanY(0);
-
-      const allPages: PageText[] = [];
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const tc = await page.getTextContent();
-        const text = tc.items.map((item: any) => item.str).join(" ");
-        allPages.push({ num: i, text });
-      }
-      setPages(allPages);
-
-      const offscreen = document.createElement("canvas");
-      const thumbScale = 0.15;
-      const thumbs: PageThumb[] = [];
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const vp = page.getViewport({ scale: thumbScale });
-        offscreen.height = vp.height;
-        offscreen.width = vp.width;
-        await page.render({ canvas: offscreen, viewport: vp }).promise;
-        thumbs.push({ num: i, dataUrl: offscreen.toDataURL("image/png") });
-      }
-      setPageThumbs(thumbs);
-    } catch (e) {
-      showToast("error", `Gagal membuka PDF: ${e}`);
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
-
-  useEffect(() => {
-    if (filePath && !pdf && !loading) {
-      loadPdf(filePath);
-    }
-  }, [filePath, pdf, loading, loadPdf]);
-
   useEffect(() => {
     if (!pdf) return;
-    renderPage(pdf, currentPage);
-  }, [pdf, currentPage, renderKey, renderPage]);
+    let disposed = false;
+    let task: pdfjsLib.RenderTask | undefined;
+    async function renderPage(pdfDoc: pdfjsLib.PDFDocumentProxy) {
+      const page = await pdfDoc.getPage(currentPage);
+      if (disposed) return;
+      const s = scaleRef.current;
+      const viewport = page.getViewport({ scale: s });
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+      task = page.render({ canvas, viewport });
+      await task.promise;
+      if (disposed) return;
+
+      const term = activeSearchRef.current;
+      if (term) {
+        const textContent = await page.getTextContent();
+        if (disposed) return;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "rgba(255, 200, 0, 0.35)";
+        const lower = term.toLowerCase();
+        for (const item of textContent.items) {
+          if (!("str" in item)) continue;
+          const str: string = (item as any).str;
+          if (!str || !str.toLowerCase().includes(lower)) continue;
+          const tx = (item as any).transform;
+          const x = tx[4] * s;
+          const y = viewport.height - tx[5] * s;
+          const w = ((item as any).width * s) || 40;
+          const h = ((item as any).height * s) || 10;
+          ctx.fillRect(x, y - Math.abs(h), Math.max(w, 20), Math.abs(h));
+        }
+      }
+    }
+    void renderPage(pdf).catch((error) => {
+      if (!disposed) showToast("error", `Gagal render halaman: ${error}`);
+    });
+    return () => { disposed = true; task?.cancel(); };
+  }, [pdf, currentPage, renderKey, showToast]);
+
+  useEffect(() => {
+    let disposed = false;
+    let task: pdfjsLib.PDFDocumentLoadingTask | undefined;
+    setPdf(null);
+    setLoadedFilePath("");
+    setTotalPages(0);
+    setCurrentPage(1);
+    setPages([]);
+    setSelectedPages(new Set());
+    setPageThumbs([]);
+    setSearchQuery("");
+    setSearchResults(null);
+    activeSearchRef.current = "";
+    setLoading(Boolean(filePath));
+    if (!filePath) return;
+
+    async function loadPdf() {
+      try {
+        const data: number[] = await invoke("read_pdf_bytes", { path: filePath });
+        if (disposed) return;
+        const pdfData = new Uint8Array(data);
+        task = pdfjsLib.getDocument({ data: pdfData });
+        const pdfDoc = await task.promise;
+        if (disposed) return;
+        setPdf(pdfDoc);
+        setLoadedFilePath(filePath);
+        setTotalPages(pdfDoc.numPages);
+        setCurrentPage(1);
+        setSelectedPages(new Set());
+        setPageThumbs([]);
+        setScale(1.5);
+        scaleRef.current = 1.5;
+        setPanX(0);
+        setPanY(0);
+
+        const allPages: PageText[] = [];
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          const tc = await page.getTextContent();
+          if (disposed) return;
+          const text = tc.items.map((item: any) => item.str).join(" ");
+          allPages.push({ num: i, text });
+        }
+        setPages(allPages);
+
+        const offscreen = document.createElement("canvas");
+        const thumbScale = 0.15;
+        const thumbs: PageThumb[] = [];
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          if (disposed) return;
+          const vp = page.getViewport({ scale: thumbScale });
+          offscreen.height = vp.height;
+          offscreen.width = vp.width;
+          await page.render({ canvas: offscreen, viewport: vp }).promise;
+          if (disposed) return;
+          thumbs.push({ num: i, dataUrl: offscreen.toDataURL("image/png") });
+        }
+        setPageThumbs(thumbs);
+      } catch (e) {
+        if (!disposed) showToast("error", `Gagal membuka PDF: ${e}`);
+      } finally {
+        if (!disposed) setLoading(false);
+      }
+    }
+    void loadPdf();
+    return () => {
+      disposed = true;
+      void task?.destroy().catch(console.error);
+    };
+  }, [filePath, reloadKey, showToast]);
 
   async function openPdf() {
     const path = await open({
@@ -143,7 +172,7 @@ export default function Viewer() {
     if (!path) return;
     const p = Array.isArray(path) ? path[0] : path;
     setFilePath(p);
-    // Let useEffect handle loading
+    setReloadKey((key) => key + 1);
   }
 
   function updateScale(newScale: number) {
@@ -221,25 +250,27 @@ export default function Viewer() {
   }
 
   async function downloadSelectedPages() {
-    if (selectedPages.size === 0) return;
+    if (loading || exporting || !loadedFilePath || loadedFilePath !== filePath || selectedPages.size === 0) return;
+    const inputPath = loadedFilePath;
+    const pagesToExport = Array.from(selectedPages).sort((a, b) => a - b);
     const path = await save({
       filters: [{ name: "PDF", extensions: ["pdf"] }],
       defaultPath: "selected-pages.pdf",
     });
     if (!path) return;
 
-    setLoading(true);
+    setExporting(true);
     try {
       await invoke("split_pdf", {
-        inputPath: filePath,
-        pages: Array.from(selectedPages).sort((a, b) => a - b),
+        inputPath,
+        pages: pagesToExport,
         outputPath: path,
       });
       showToast("success", `Halaman berhasil diekstrak: ${path}`);
     } catch (e) {
       showToast("error", `Gagal mengekstrak halaman: ${e}`);
     }
-    setLoading(false);
+    setExporting(false);
   }
 
   return (
@@ -381,12 +412,12 @@ export default function Viewer() {
               <motion.button
                 className="btn-primary"
                 onClick={downloadSelectedPages}
-                disabled={loading || selectedPages.size === 0}
+                disabled={loading || exporting || loadedFilePath !== filePath || selectedPages.size === 0}
                 style={{ width: "100%", marginTop: 8 }}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.97 }}
               >
-                {loading ? "Downloading..." : `Download Selected (${selectedPages.size})`}
+                {exporting ? "Downloading..." : `Download Selected (${selectedPages.size})`}
               </motion.button>
             </motion.div>
           )}

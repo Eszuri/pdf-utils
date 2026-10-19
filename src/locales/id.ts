@@ -10,6 +10,7 @@ export default {
   "word.remove": "Hapus pilihan",
   "word.convert": "Konversi ke Word",
   "word.cancel": "Batalkan",
+  "splitPdf.retry": "Coba lagi",
   "word.cancelling": "Membatalkan konversi…",
   "word.cancelled": "Konversi dibatalkan. File tujuan tidak diubah.",
   "word.reading": "Membaca dokumen…",
