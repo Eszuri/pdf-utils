@@ -388,6 +388,13 @@ pub fn toggle_context_menu(enable: bool) -> Result<(), String> {
             let (m_cmd, _) = m_key.create_subkey("command").map_err(|e| e.to_string())?;
             m_cmd.set_value("", &format!("\"{}\" --merge \"%1\"", exe_str)).map_err(|e| e.to_string())?;
 
+            // Subkey 5: Extract Images
+            let (e_key, _) = pdf_key.create_subkey("shell\\05_extract").map_err(|e| e.to_string())?;
+            e_key.set_value("", &"Ekstrak Gambar dari PDF").map_err(|e| e.to_string())?;
+            e_key.set_value("MUIVerb", &"Ekstrak Gambar dari PDF").map_err(|e| e.to_string())?;
+            let (e_cmd, _) = e_key.create_subkey("command").map_err(|e| e.to_string())?;
+            e_cmd.set_value("", &format!("\"{}\" --extract-images \"%1\"", exe_str)).map_err(|e| e.to_string())?;
+
             // 2. Direct Context Menu for Image files (.png, .jpg, .jpeg, .webp, .bmp)
             for ext in IMAGE_EXTENSIONS {
                 let img_path = format!("Software\\Classes\\SystemFileAssociations\\{}\\shell\\PDFUtilsImage", ext);

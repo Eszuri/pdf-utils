@@ -12,6 +12,15 @@ export interface PdfItem {
   size: string;
 }
 
+export interface ExtractedImageItem {
+  id: string;
+  name: string;
+  pages: number[];
+  width: number;
+  height: number;
+  dataUrl: string;
+}
+
 interface ToolStateContextType {
   // ImageToPdf
   imgToPdfImages: ImageItem[];
@@ -36,6 +45,18 @@ interface ToolStateContextType {
   // Viewer
   viewerFilePath: string;
   setViewerFilePath: React.Dispatch<React.SetStateAction<string>>;
+
+  // ExtractImages
+  extractPdfFilePath: string;
+  setExtractPdfFilePath: React.Dispatch<React.SetStateAction<string>>;
+  extractPdfFileName: string;
+  setExtractPdfFileName: React.Dispatch<React.SetStateAction<string>>;
+  extractPdfPageCount: number;
+  setExtractPdfPageCount: React.Dispatch<React.SetStateAction<number>>;
+  extractedImages: ExtractedImageItem[];
+  setExtractedImages: React.Dispatch<React.SetStateAction<ExtractedImageItem[]>>;
+  extractSelectedIds: string[];
+  setExtractSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 const ToolStateContext = createContext<ToolStateContextType | undefined>(undefined);
@@ -52,6 +73,12 @@ export function ToolStateProvider({ children }: { children: ReactNode }) {
   
   const [viewerFilePath, setViewerFilePath] = useState("");
 
+  const [extractPdfFilePath, setExtractPdfFilePath] = useState("");
+  const [extractPdfFileName, setExtractPdfFileName] = useState("");
+  const [extractPdfPageCount, setExtractPdfPageCount] = useState(0);
+  const [extractedImages, setExtractedImages] = useState<ExtractedImageItem[]>([]);
+  const [extractSelectedIds, setExtractSelectedIds] = useState<string[]>([]);
+
   return (
     <ToolStateContext.Provider
       value={{
@@ -63,6 +90,11 @@ export function ToolStateProvider({ children }: { children: ReactNode }) {
         splitPdfThumbs, setSplitPdfThumbs,
         splitPdfSelectedPages, setSplitPdfSelectedPages,
         viewerFilePath, setViewerFilePath,
+        extractPdfFilePath, setExtractPdfFilePath,
+        extractPdfFileName, setExtractPdfFileName,
+        extractPdfPageCount, setExtractPdfPageCount,
+        extractedImages, setExtractedImages,
+        extractSelectedIds, setExtractSelectedIds,
       }}
     >
       {children}

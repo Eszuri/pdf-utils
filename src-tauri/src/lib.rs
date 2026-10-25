@@ -57,6 +57,15 @@ pub fn run() {
                         });
                     }
                 }
+            } else if let Some(pos) = args.iter().position(|a| a == "--extract-images") {
+                if let Some(file) = args.get(pos + 1) {
+                    if std::path::Path::new(file).is_file() {
+                        launch_action = Some(commands::LaunchAction {
+                            mode: "extract-images".to_string(),
+                            file: file.clone(),
+                        });
+                    }
+                }
             } else if let Some(pos) = args.iter().position(|a| a == "--merge") {
                 if let Some(file) = args.get(pos + 1) {
                     if std::path::Path::new(file).is_file() {

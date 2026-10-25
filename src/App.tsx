@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import ImageToPdf from "./pages/ImageToPdf";
 import MergePdf from "./pages/MergePdf";
 import SplitPdf from "./pages/SplitPdf";
+import ExtractImages from "./pages/ExtractImages";
 import Viewer from "./pages/Viewer";
 import Settings from "./pages/Settings";
 import PdfToWord from "./pages/PdfToWord";
@@ -48,6 +49,7 @@ function App() {
     setSplitPdfSelectedPages,
     setMergePdfFiles,
     setImgToPdfImages,
+    setExtractPdfFilePath,
   } = useToolState();
 
   useEffect(() => {
@@ -64,6 +66,9 @@ function App() {
           setSplitPdfThumbs([]);
           setSplitPdfSelectedPages([]);
           navigate("/maker/split");
+        } else if (mode === "extract-images") {
+          setExtractPdfFilePath(file);
+          navigate("/maker/extract-images");
         } else if (mode === "merge") {
           const name = file.split(/[\\/]/).pop() || file;
           invoke<number[]>("read_pdf_bytes", { path: file })
@@ -103,6 +108,7 @@ function App() {
     setSplitPdfSelectedPages,
     setMergePdfFiles,
     setImgToPdfImages,
+    setExtractPdfFilePath,
   ]);
 
   return (
@@ -113,6 +119,7 @@ function App() {
           <Route path="maker/image" element={<ImageToPdf />} />
           <Route path="maker/merge" element={<MergePdf />} />
           <Route path="maker/split" element={<SplitPdf />} />
+          <Route path="maker/extract-images" element={<ExtractImages />} />
           <Route path="viewer" element={<Viewer />} />
           <Route path="converter/pdf-to-word" element={<PdfToWord />} />
           <Route path="settings" element={<Settings />} />

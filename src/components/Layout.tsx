@@ -16,6 +16,7 @@ export default function Layout() {
         {to: "/maker/image", label: t("nav.imageToPdf"), icon: "🖼"},
         {to: "/maker/merge", label: t("nav.mergePdf"), icon: "📑"},
         {to: "/maker/split", label: t("nav.splitPdf"), icon: "✂"},
+        {to: "/maker/extract-images", label: t("nav.extractImages"), icon: "📸"},
         {to: "/viewer", label: t("nav.viewer"), icon: "🔍"},
         {to: "/converter/pdf-to-word", label: t("word.title"), icon: "📝"},
     ];
