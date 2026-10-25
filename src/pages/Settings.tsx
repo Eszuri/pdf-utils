@@ -70,8 +70,8 @@ export default function Settings() {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <h3 style={{ fontSize: "15px", marginBottom: "4px", color: "var(--text-primary)" }}>Bahasa (Language)</h3>
-                    <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>Pilih bahasa antarmuka aplikasi.</p>
+                    <h3 style={{ fontSize: "15px", marginBottom: "4px", color: "var(--text-primary)" }}>{t('settings.langTitle')}</h3>
+                    <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>{t('settings.langDesc')}</p>
                   </div>
                   <select
                     value={language}
@@ -212,8 +212,8 @@ export default function Settings() {
                 style={{ display: "flex", flexDirection: "column", gap: "24px" }}
               >
                 <div>
-                  <h3 style={{ fontSize: "15px", marginBottom: "4px", color: "var(--text-primary)" }}>Warna Aksen (Accent Color)</h3>
-                  <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "16px" }}>Pilih warna utama untuk antarmuka.</p>
+                  <h3 style={{ fontSize: "15px", marginBottom: "4px", color: "var(--text-primary)" }}>{t('settings.accentTitle')}</h3>
+                  <p style={{ fontSize: "13px", color: "var(--text-muted)", marginBottom: "16px" }}>{t('settings.accentDesc')}</p>
                   
                   <div style={{ display: "flex", gap: "12px" }}>
                     {Object.entries(accentColors).map(([name, hex]) => (

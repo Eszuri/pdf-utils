@@ -77,7 +77,7 @@ export default function MergePdf() {
 
   async function handleMerge() {
     if (pdfs.length < 2) {
-      showToast("error", "Minimal 2 file PDF untuk digabung.");
+      showToast("error", t("mergePdf.minFiles"));
       return;
     }
     const savePath = await save({
@@ -90,7 +90,7 @@ export default function MergePdf() {
     try {
       const paths = pdfs.map((p) => p.path);
       await invoke("merge_pdfs", { inputPaths: paths, outputPath: savePath });
-      showToast("success", `PDF berhasil digabung ke: ${savePath}`);
+      showToast("success", t("mergePdf.success").replace("{path}", savePath));
       if (openExplorer) {
         invoke("show_in_folder", { path: savePath }).catch(e => console.error(e));
       }

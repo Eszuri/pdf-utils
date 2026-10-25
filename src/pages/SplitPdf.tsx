@@ -309,7 +309,7 @@ export default function SplitPdf() {
                   onChange={selectAll}
                   style={{ accentColor: "var(--accent)" }}
                 />
-                Select All Pages
+                {t("splitPdf.selectAll")}
               </label>
 
               <motion.div
@@ -343,7 +343,7 @@ export default function SplitPdf() {
                         onChange={() => togglePage(thumb.num)}
                         style={{ accentColor: "var(--accent)" }}
                       />
-                      <span>Page {thumb.num}</span>
+                      <span>{t("splitPdf.page")} {thumb.num}</span>
                     </div>
                   </motion.div>
                 )) : (
@@ -364,7 +364,7 @@ export default function SplitPdf() {
                         onChange={() => togglePage(p)}
                         style={{ accentColor: "var(--accent)" }}
                       />
-                      Page {p}
+                      {t("splitPdf.page")} {p}
                     </motion.label>
                   ))
                 )}
@@ -385,7 +385,7 @@ export default function SplitPdf() {
               {t("splitPdf.processing")}
             </>
           ) : (
-            `Extract ${selectedPages.length} Pages`
+            t("splitPdf.extractPages").replace("{count}", String(selectedPages.length))
           )}
         </button>
       </div>
