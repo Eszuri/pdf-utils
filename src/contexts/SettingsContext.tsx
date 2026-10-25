@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { translations, Language, TranslationKey } from "../locales";
+import { accentColors } from "../lib/theme";
 
 interface SettingsContextType {
   language: Language;
@@ -31,14 +32,6 @@ const SettingsContext = createContext<SettingsContextType>(defaultContext);
 export function useSettings() {
   return useContext(SettingsContext);
 }
-
-export const accentColors: Record<string, string> = {
-  indigo: "#6366f1",
-  blue: "#3b82f6",
-  emerald: "#10b981",
-  rose: "#f43f5e",
-  amber: "#f59e0b",
-};
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [language, setLanguage] = useState<Language>(() => {
