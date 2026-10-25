@@ -607,9 +607,19 @@
 .reader-stage .pdfViewer {
   padding-top: 4px;
   min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 .reader-stage .pdfViewer .page {
   box-shadow: 0 3px 15px #0005;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.reader-stage .pdfViewer .page .canvasWrapper canvas {
+  image-rendering: auto;
+  image-rendering: -webkit-optimize-contrast;
+  transform: translateZ(0);
 }
 .reader-stage.is-hand .textLayer,
 .reader-stage.is-hand .annotationLayer {
@@ -637,6 +647,8 @@
   height: auto;
   border-radius: 2px;
   box-shadow: var(--shadow-sm);
+  image-rendering: auto;
+  image-rendering: -webkit-optimize-contrast;
 }
 
 .reader-viewer .viewer-tools nav {

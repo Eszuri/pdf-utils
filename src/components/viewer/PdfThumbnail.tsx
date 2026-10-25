@@ -38,8 +38,10 @@ export default function PdfThumbnail({
         scale: 1,
         rotation: (source.rotate + rotation) % 360,
       });
+      const dpr = window.devicePixelRatio || 1;
+      const targetWidth = 140;
       const viewport = source.getViewport({
-        scale: 140 / size.width,
+        scale: (targetWidth / size.width) * dpr,
         rotation: size.rotation,
       });
       canvas.current.width = Math.ceil(viewport.width);

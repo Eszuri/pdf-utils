@@ -168,17 +168,22 @@ export default function SplitPdf() {
       if (!container) return;
       container.innerHTML = "";
 
+      const dpr = window.devicePixelRatio || 1;
       for (let i = 1; i <= pdfDoc.numPages; i++) {
         if (token !== previewToken.current) return;
         const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 1.0 });
+        const cssViewport = page.getViewport({ scale: 1.0 });
+        const viewport = page.getViewport({ scale: 1.0 * dpr });
         const canvas = document.createElement("canvas");
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+        canvas.height = Math.ceil(viewport.height);
+        canvas.width = Math.ceil(viewport.width);
+        canvas.style.width = `${Math.ceil(cssViewport.width)}px`;
+        canvas.style.height = `${Math.ceil(cssViewport.height)}px`;
         canvas.style.display = "block";
         canvas.style.margin = "0 auto 12px";
         canvas.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)";
         canvas.style.borderRadius = "4px";
+        canvas.style.imageRendering = "-webkit-optimize-contrast";
         container.appendChild(canvas);
         await page.render({ canvas, viewport }).promise;
       }

@@ -103,6 +103,8 @@ export function usePdfReader(
     const abort = new AbortController();
     let resizeObserver: ResizeObserver | undefined;
     let resizeFrame = 0;
+    let dprMediaQuery: MediaQueryList | null = null;
+    let dprHandler: (() => void) | null = null;
     setDocument(null);
     setLoadedPath("");
     setOpening(Boolean(path));
@@ -176,8 +178,33 @@ export function usePdfReader(
           annotationEditorHighlightColors:
             "yellow=#fff066,green=#82e6a6,blue=#90c6ff,pink=#f7a5cc",
           abortSignal: abort.signal,
+          enableDetailCanvas: false,
+          capCanvasAreaFactor: -1,
+          maxCanvasPixels: 67108864,
         };
         const viewer = new PDFViewer(options);
+
+        // Keep viewer sharp if window moves between monitors or devicePixelRatio changes
+        const listenDpr = () => {
+          if (dprMediaQuery && dprHandler) {
+            dprMediaQuery.removeEventListener("change", dprHandler);
+          }
+          dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+          dprHandler = () => {
+            if (disposed || !viewer.pagesCount) return;
+            listenDpr();
+            const preset = viewer.currentScaleValue;
+            if (["auto", "page-fit", "page-width"].includes(preset)) {
+              viewer.currentScaleValue = preset;
+            } else {
+              viewer.currentScale = viewer.currentScale;
+            }
+            viewer.update();
+          };
+          dprMediaQuery.addEventListener("change", dprHandler);
+        };
+        listenDpr();
+
         // The hosting app must reapply fit presets when panels or windows resize.
         resizeObserver = new ResizeObserver(() => {
           cancelAnimationFrame(resizeFrame);
@@ -363,6 +390,11 @@ export function usePdfReader(
       setPassword(null);
       resizeObserver?.disconnect();
       cancelAnimationFrame(resizeFrame);
+      if (dprMediaQuery && dprHandler) {
+        dprMediaQuery.removeEventListener("change", dprHandler);
+        dprMediaQuery = null;
+        dprHandler = null;
+      }
       if (reader) {
         reader.viewer.setDocument(null!);
         reader.links.setDocument(null);
